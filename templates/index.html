@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Packet Sniffer Dashboard</title>
+
+    <!-- TailwindCSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Leaflet -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+      body {
+        background-color: #0f172a;
+        color: #e6eef8;
+      }
+      .card {
+        background-color: #1e293b;
+        border-radius: 1rem;
+        padding: 1rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      }
+      .small {
+        font-size: 0.85rem;
+        color: #94a3b8;
+      }
+      .digital-counter {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
+          "Courier New", monospace;
+        letter-spacing: 0.02em;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.02),
+          rgba(0, 0, 0, 0.02)
+        );
+        padding: 0.25rem 0.5rem;
+        border-radius: 0.25rem;
+        display: inline-block;
+      }
+      .badge {
+        padding: 0.15rem 0.5rem;
+        border-radius: 0.25rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+      }
+      .tooltip-custom {
+        background-color: #1e293b;
+        color: #e6eef8;
+        border-radius: 0.25rem;
+        padding: 0.2rem 0.5rem;
+        font-size: 0.75rem;
+      }
+    </style>
+  </head>
+  <body class="p-6">
+    <div class="max-w-7xl mx-auto flex flex-col space-y-6">
+      <!-- Header -->
+      <header
+        class="flex flex-col md:flex-row justify-between items-start md:items-center"
+      >
+        <h1 class="text-2xl md:text-3xl font-bold mb-2 md:mb-0">
+          📡 Packet Sniffer Dashboard
+        </h1>
+        <div class="small text-gray-400">Auto-refresh every 2 seconds</div>
+      </header>
+
+      <!-- Top Stats Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div class="card flex flex-col justify-between h-40 sm:h-56">
+          <div class="flex justify-between items-center">
+            <div class="small">📦 Total Packets</div>
+            <span class="badge bg-blue-600">Live</span>
+          </div>
+          <div id="totalPackets" class="text-4xl font-semibold mt-2">0</div>
+          <div class="small mt-2">
+            🔗 Active Connections: <span id="activeConnections">0</span>
+          </div>
+        </div>
+
+        <div class="card h-40 sm:h-56">
+          <div class="flex justify-between items-center">
+            <div class="small">⚡ Bandwidth (Bytes/sec)</div>
+            <span class="badge bg-green-600">Current</span>
+          </div>
+          <div class="w-full h-28 sm:h-40">
+            <canvas id="bandwidthChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <div class="card h-40 sm:h-56">
+          <div class="flex justify-between items-center">
+            <div class="small">🚨 Recent Alerts</div>
+            <span class="badge bg-red-600">Critical</span>
+          </div>
+          <ul
+            id="alertsList"
+            class="mt-2 text-sm overflow-y-auto max-h-40 custom-scroll"
+          ></ul>
+          <style>
+            /* Custom scroll UI for alerts list */
+            .custom-scroll::-webkit-scrollbar {
+              width: 8px;
+              background: #1e293b;
+              border-radius: 8px;
+            }
+            .custom-scroll::-webkit-scrollbar-thumb {
+              background: #334155;
+              border-radius: 8px;
+            }
+            .custom-scroll::-webkit-scrollbar-thumb:hover {
+              background: #475569;
+            }
+            .custom-scroll {
+              scrollbar-width: thin;
+              scrollbar-color: #334155 #1e293b;
+            }
+          </style>
+        </div>
+      </div>
+
+      <!-- Charts Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="card">
+          <div class="small mb-2">Protocol Distribution</div>
+          <div class="w-full h-48 sm:h-56">
+            <canvas id="protocolChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="small mb-2">Top Active IPs</div>
+          <div class="w-full h-48 sm:h-64">
+            <canvas id="ipChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="small mb-2">Top Ports</div>
+          <div class="w-full h-40 sm:h-56">
+            <canvas id="portChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="small mb-2">Packet Size Distribution</div>
+          <div class="w-full h-40 sm:h-56">
+            <canvas id="sizeChart" class="w-full h-full"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Map & Raw Data -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="card">
+          <div class="small mb-2">GeoIP Map (Top IPs)</div>
+          <div id="map" class="relative h-64 sm:h-80 md:h-96 rounded-lg">
+            <div
+              id="mapEmpty"
+              class="absolute inset-0 flex items-center justify-center text-sm text-gray-300 bg-black/30 rounded-lg pointer-events-none"
+              style="display: none"
+            >
+              No GeoIP data yet
+            </div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="small mb-2">📜 Live Logs</div>
+          <ul
+            id="logsList"
+            class="text-xs h-64 sm:h-80 md:h-96 overflow-auto custom-scroll"
+          ></ul>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let protocolChart, ipChart, portChart, sizeChart, bandwidthChart;
+      // helper to know if bandwidth chart has been initialized
+      let _bandwidthInitialized = false;
+
+      // Format integer with commas (thousands separators)
+      function formatNumber(n) {
+        return n.toLocaleString();
+      }
+
+      // Mechanical-style counter: updates in visible integer steps (like an old gas meter)
+      // duration in ms, fps controls the visible tick rate (lower fps -> chunkier steps)
+      function mechanicalCounter(el, target, duration = 1400, fps = 12) {
+        if (!el) return;
+        const startVal = parseInt(
+          el.dataset.current || el.innerText.replace(/[^0-9]/g, "") || "0",
+          10
+        );
+        target = parseInt(target || 0, 10);
+        if (isNaN(startVal) || isNaN(target) || startVal === target) {
+          el.innerText = formatNumber(target);
+          el.dataset.current = String(target);
+          return;
+        }
+
+        // clear previous interval if running
+        if (el._mechInterval) {
+          clearInterval(el._mechInterval);
+          el._mechInterval = null;
+        }
+
+        const steps = Math.max(3, Math.round((duration / 1000) * fps));
+        const stepDelay = Math.round(duration / steps);
+        const diff = target - startVal;
+        let step = 0;
+
+        el._mechInterval = setInterval(() => {
+          step++;
+          // slightly accelerating curve for a mechanical feel
+          const t = step / steps;
+          const eased = Math.pow(t, 1.12);
+          const val = Math.round(startVal + diff * eased);
+          el.innerText = formatNumber(val);
+          el.dataset.current = String(val);
+          // quick tick visual (tiny flash)
+          el.classList.add("opacity-95");
+          setTimeout(() => el.classList.remove("opacity-95"), 80);
+          if (step >= steps) {
+            clearInterval(el._mechInterval);
+            el._mechInterval = null;
+            el.innerText = formatNumber(target);
+            el.dataset.current = String(target);
+          }
+        }, stepDelay);
+      }
+      const colorPalette = [
+        "#60a5fa",
+        "#34d399",
+        "#f97316",
+        "#ef4444",
+        "#a78bfa",
+        "#f59e0b",
+        "#06b6d4",
+        "#fb7185",
+      ];
+
+      // Create/recreate all charts from provided data. Charts are destroyed first to ensure fresh state.
+      function createCharts(data) {
+        // destroy existing charts if present
+        try {
+          if (protocolChart) protocolChart.destroy();
+        } catch (e) {}
+        try {
+          if (ipChart) ipChart.destroy();
+        } catch (e) {}
+        try {
+          if (portChart) portChart.destroy();
+        } catch (e) {}
+        try {
+          if (sizeChart) sizeChart.destroy();
+        } catch (e) {}
+        try {
+          if (bandwidthChart) bandwidthChart.destroy();
+        } catch (e) {}
+
+        // Protocol chart
+        const protoLabels =
+          data && data.protocols ? Object.keys(data.protocols) : [];
+        const protoData =
+          data && data.protocols ? Object.values(data.protocols) : [];
+        protocolChart = new Chart(document.getElementById("protocolChart"), {
+          type: "doughnut",
+          data: {
+            labels: protoLabels,
+            datasets: [
+              {
+                data: protoData,
+                backgroundColor: colorPalette.slice(0, protoLabels.length),
+                borderColor: colorPalette
+                  .slice(0, protoLabels.length)
+                  .map(() => "#0f172a"),
+                borderWidth: 1,
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: "#e6eef8" } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
+              },
+            },
+          },
+        });
+
+        // IP chart
+        const ipLabels =
+          data && data.top_ips
+            ? data.top_ips.map((x) => x[0] + " (" + x[1] + ")")
+            : [];
+        const ipData =
+          data && data.top_ips ? data.top_ips.map((x) => x[1]) : [];
+        ipChart = new Chart(document.getElementById("ipChart"), {
+          type: "bar",
+          data: {
+            labels: ipLabels,
+            datasets: [{ label: "Packets", data: ipData }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: "y",
+            plugins: {
+              legend: { labels: { color: "#e6eef8" } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
+              },
+            },
+            scales: {
+              x: { ticks: { color: "#e6eef8" } },
+              y: { ticks: { color: "#e6eef8" } },
+            },
+          },
+        });
+
+        // Port chart
+        const portLabels =
+          data && data.top_ports ? data.top_ports.map((x) => x[0]) : [];
+        const portData =
+          data && data.top_ports ? data.top_ports.map((x) => x[1]) : [];
+        portChart = new Chart(document.getElementById("portChart"), {
+          type: "bar",
+          data: {
+            labels: portLabels,
+            datasets: [{ label: "Hits", data: portData }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: "#e6eef8" } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
+              },
+            },
+            scales: {
+              x: { ticks: { color: "#e6eef8" } },
+              y: { ticks: { color: "#e6eef8" }, beginAtZero: true },
+            },
+          },
+        });
+
+        // Size chart
+        const sizeLabels =
+          data && data.packet_sizes ? data.packet_sizes.map((x) => x[0]) : [];
+        const sizeData =
+          data && data.packet_sizes ? data.packet_sizes.map((x) => x[1]) : [];
+        sizeChart = new Chart(document.getElementById("sizeChart"), {
+          type: "bar",
+          data: {
+            labels: sizeLabels,
+            datasets: [{ label: "Count", data: sizeData }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: "#e6eef8" } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
+              },
+            },
+            scales: {
+              x: { ticks: { color: "#e6eef8" } },
+              y: { ticks: { color: "#e6eef8" }, beginAtZero: true },
+            },
+          },
+        });
+
+        // Bandwidth chart (use full buffer from server)
+        const bw = data && data.bandwidth ? data.bandwidth.slice() : [];
+        bandwidthChart = new Chart(document.getElementById("bandwidthChart"), {
+          type: "line",
+          data: {
+            labels: bw.map((_, i) => i - bw.length + "s"),
+            datasets: [
+              {
+                label: "Bytes/sec",
+                data: bw,
+                fill: true,
+                tension: 0.25,
+                backgroundColor: "rgba(96,165,250,0.15)",
+                borderColor: "#60a5fa",
+              },
+            ],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: "index" },
+            elements: { point: { radius: 0 } },
+            animations: {
+              x: { duration: 1000, easing: "linear" },
+              y: { duration: 400, easing: "easeOutCubic" },
+            },
+            plugins: {
+              legend: { labels: { color: "#e6eef8" } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
+              },
+            },
+            scales: {
+              x: {
+                ticks: { color: "#e6eef8" },
+                grid: { color: "rgba(230,238,248,0.03)" },
+              },
+              y: {
+                ticks: { color: "#e6eef8" },
+                grid: { color: "rgba(230,238,248,0.03)" },
+              },
+            },
+          },
+        });
+      }
+
+      // Map (simplified, more robust marker handling)
+      let map = L.map("map").setView([20, 0], 2);
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 18,
+      }).addTo(map);
+
+      // simple markers array approach (clear old markers, add new)
+      let markers = [];
+      function updateMap(points) {
+        try {
+          console.debug("updateMap points:", points);
+
+          // ensure map size is up-to-date (fixes rendering when container resized)
+          // call early so fitBounds/center calculations are correct
+          try {
+            map.invalidateSize();
+          } catch (err) {
+            // ignore if map not fully initialized yet
+          }
+
+          // remove old markers
+          markers.forEach((m) => map.removeLayer(m));
+          markers = [];
+
+          (points || []).forEach((p) => {
+            // allow lat/lon == 0 but reject null/undefined
+            if (p && p.lat != null && p.lon != null) {
+              // parse floats to be safe (strings from server are allowed)
+              const lat = parseFloat(p.lat);
+              const lon = parseFloat(p.lon);
+              if (Number.isFinite(lat) && Number.isFinite(lon)) {
+                const marker = L.marker([lat, lon])
+                  .addTo(map)
+                  .bindPopup(
+                    `<strong>${p.ip}</strong><br>${p.country || ""} ${
+                      p.city || ""
+                    }<br>Packets: ${p.count}`
+                  );
+                markers.push(marker);
+              }
+            }
+          });
+
+          const empty = document.getElementById("mapEmpty");
+          if (!markers.length) {
+            if (empty) empty.style.display = "";
+          } else {
+            if (empty) empty.style.display = "none";
+          }
+
+          // center/fit after markers have been added
+          if (markers.length === 1) {
+            try {
+              map.setView(markers[0].getLatLng(), 4);
+            } catch (err) {
+              console.warn("setView failed", err);
+            }
+          } else if (markers.length > 1) {
+            try {
+              const group = L.featureGroup(markers);
+              map.fitBounds(group.getBounds(), {
+                maxZoom: 5,
+                padding: [20, 20],
+              });
+            } catch (err) {
+              console.warn("fitBounds failed", err);
+            }
+          }
+        } catch (e) {
+          console.error("updateMap error", e);
+        }
+      }
+
+      // Alerts
+      function renderAlerts(list) {
+        const node = document.getElementById("alertsList");
+        node.innerHTML = "";
+
+        // defensive: handle missing/invalid data
+        if (!Array.isArray(list) || list.length === 0) {
+          return;
+        }
+
+        list.forEach((a) => {
+          if (!a) return;
+
+          // safe severity (default 'info' if missing)
+          const severity =
+            typeof a.severity === "string" && a.severity ? a.severity : "info";
+
+          // safe time (use provided numeric seconds or current time)
+          const timeSec =
+            typeof a.time === "number" && Number.isFinite(a.time)
+              ? a.time
+              : Math.floor(Date.now() / 1000);
+
+          const dt = new Date(timeSec * 1000);
+
+          const badgeColor =
+            severity === "error"
+              ? "bg-red-500"
+              : severity === "warn"
+              ? "bg-yellow-400"
+              : "bg-blue-400";
+
+          const li = document.createElement("li");
+
+          const sevUpper = String(severity).toUpperCase();
+          const msg = a.msg || "";
+
+          li.innerHTML = `<span class="badge ${badgeColor}">${sevUpper}</span> <span class="text-xs text-gray-300">${dt.toLocaleTimeString()}</span> — ${msg}`;
+          node.appendChild(li);
+        });
+      }
+      // Logs
+      function renderLogs(list) {
+        const node = document.getElementById("logsList");
+        node.innerHTML = "";
+
+        if (!Array.isArray(list)) return;
+
+        list.forEach((log) => {
+          if (!log) return;
+          const dt = new Date(log.time * 1000).toLocaleTimeString();
+          let color =
+            log.level === "error"
+              ? "text-red-400"
+              : log.level === "warn"
+              ? "text-yellow-300"
+              : "text-blue-300";
+
+          const li = document.createElement("li");
+          li.className = `mb-1 ${color}`;
+          li.textContent = `[${dt}] [${log.level.toUpperCase()}] ${log.msg}`;
+          node.appendChild(li);
+        });
+      }
+
+      // Fetch Data
+      async function fetchData() {
+        try {
+          const res = await fetch("/data");
+          const data = await res.json();
+          // animated total packets counter (mechanical/gas-meter style)
+          mechanicalCounter(
+            document.getElementById("totalPackets"),
+            data.total_packets,
+            1400,
+            12
+          );
+          document.getElementById("activeConnections").innerText =
+            data.active_connections;
+
+          // Protocol
+          const protoLabels = Object.keys(data.protocols);
+          protocolChart.data.labels = protoLabels;
+          protocolChart.data.datasets[0].data = Object.values(data.protocols);
+          protocolChart.data.datasets[0].backgroundColor = colorPalette.slice(
+            0,
+            protoLabels.length
+          );
+          protocolChart.data.datasets[0].borderColor = colorPalette
+            .slice(0, protoLabels.length)
+            .map(() => "#0f172a");
+          protocolChart.update();
+
+          ipChart.data.labels = data.top_ips.map(
+            (x) => x[0] + " (" + x[1] + ")"
+          );
+          ipChart.data.datasets[0].data = data.top_ips.map((x) => x[1]);
+          ipChart.update();
+
+          portChart.data.labels = data.top_ports.map((x) => x[0]);
+          portChart.data.datasets[0].data = data.top_ports.map((x) => x[1]);
+          portChart.update();
+
+          sizeChart.data.labels = data.packet_sizes.map((x) => x[0]);
+          sizeChart.data.datasets[0].data = data.packet_sizes.map((x) => x[1]);
+          sizeChart.update();
+
+          // Smooth right-to-left scrolling: append only the newest sample and shift oldest
+          const bw = data.bandwidth || [];
+          if (!Array.isArray(bw) || bw.length === 0) {
+            // nothing to do
+          } else if (!_bandwidthInitialized) {
+            // initialize full buffer on first load
+            bandwidthChart.data.datasets[0].data = bw.slice();
+            bandwidthChart.data.labels = bw.map((_, i) => i - bw.length + "s");
+            bandwidthChart.update();
+            _bandwidthInitialized = true;
+          } else {
+            // Only append the newest sample and shift if needed to create scrolling effect
+            const newest = bw[bw.length - 1];
+            bandwidthChart.data.datasets[0].data.push(newest);
+            // ensure length matches server buffer length
+            while (bandwidthChart.data.datasets[0].data.length > bw.length) {
+              bandwidthChart.data.datasets[0].data.shift();
+            }
+            // update labels to remain relative (e.g. "-59s ... 0s")
+            const arr = bandwidthChart.data.datasets[0].data;
+            bandwidthChart.data.labels = arr.map(
+              (_, i) => i - arr.length + "s"
+            );
+
+            // Update the chart — Chart.js will animate the x translation using our animations.x config
+            bandwidthChart.update();
+          }
+
+          renderAlerts(data.alerts);
+          updateMap(data.geo_points);
+         renderLogs(data.logs || []);
+
+          document.getElementById("rawDebug").innerText = JSON.stringify(
+            data,
+            null,
+            2
+          );
+        } catch (e) {
+          console.error(e);
+        }
+        setTimeout(fetchData, 2000);
+      }
+
+      createCharts();
+      fetchData();
+    </script>
+  </body>
+</html>
