@@ -3,3 +3,7 @@ GeoLite2-Country.mmdb
 # GeoLite2-ASN.mmdb
 __pycache__/
 GeoLite2-City.mmdb
+/env
+window-test.py
+test_capture.py
+geo.py
