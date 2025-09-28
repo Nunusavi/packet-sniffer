@@ -2,6 +2,7 @@ import time
 import threading
 import heapq
 import json
+import webbrowser
 import psutil
 import socket
 import struct
@@ -22,6 +23,7 @@ except Exception:
     GEOIP2_AVAILABLE = False
 
 import requests  # fallback for GeoIP
+from waitress import serve
 
 app = Flask(__name__)
 
@@ -115,6 +117,7 @@ geo_reader = None
 if GEOIP2_AVAILABLE and os.path.exists(GEOIP_DB_PATH):
     geo_reader = geoip2.database.Reader(GEOIP_DB_PATH)
 
+LOCAL_IP = "127.0.0.1" # Default value
 
 # ---------------------------
 # Windows Firewall Workaround
@@ -367,21 +370,19 @@ def detect_system_info():
 # Process and Application Monitoring
 # ---------------------------
 def get_local_ip():
-    """Get the local machine's IP address"""
+    """
+    Find the local IP address of the machine.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        # Connect to a remote address to determine local IP
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        # Doesn't even have to be reachable
         s.connect(("8.8.8.8", 80))
-        local_ip = s.getsockname()[0]
+        ip = s.getsockname()[0]
+    except Exception:
+        ip = "127.0.0.1"
+    finally:
         s.close()
-        log(f"Local IP detected: {local_ip}")
-        return local_ip
-    except Exception as e:
-        log(f"Could not detect local IP: {e}", "warn")
-        return "127.0.0.1"
-
-
-LOCAL_IP = get_local_ip()
+    return ip
 
 
 def update_process_connections():
@@ -1213,21 +1214,27 @@ def data():
 # Run
 # ---------------------------
 if __name__ == "__main__":
+    # Get system info and set global LOCAL_IP
+    LOCAL_IP = get_local_ip()
+    system_info = platform.system()
+
     log("Starting Enhanced Packet Sniffer + Visualizer")
+    
+    # --- Print Startup Info ---
     print("=" * 60)
     print("Enhanced Network Packet Sniffer")
     print("=" * 60)
-    print("IMPORTANT NOTES:")
-    print("1. Run as Administrator (Windows) or Root (Linux/Mac)")
-    print("2. Some antivirus software may block packet capture")
-    print("3. Windows may require WinPcap or Npcap installed")
-    print("4. Check /status endpoint for capture status")
-    print("=" * 60)
     print(f"Local IP detected: {LOCAL_IP}")
-    print(f"System: {platform.system()}")
+    print(f"System: {system_info}")
     print("Starting services...")
 
-    start_sniffer()
-    app.run(
-        debug=False, host="0.0.0.0", port=5000
-    )  # Changed debug to False for production
+    # Start the sniffer in a background thread
+    sniffer_thread = threading.Thread(target=start_sniffer, daemon=True)
+    sniffer_thread.start()
+    
+    url = "http://127.0.0.1:5000"
+    print(f"Application will be opened at {url}")
+    threading.Timer(2, lambda: webbrowser.open_new_tab(url)).start()
+    
+    # Use waitress for production
+    serve(app, host="0.0.0.0", port=5000)

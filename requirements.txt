@@ -3,3 +3,5 @@ scapy
 geoip2      # optional (faster, local DB); the code falls back if not installed
 requests
 psutil
+werkzeug
+waitress
