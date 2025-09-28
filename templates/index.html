@@ -1,4 +1,19 @@
-<!DOCTYPE html>
+// Interface Management
+      let availableInterfaces = [];
+      let currentInterface = null;
+      let isWindows = false;
+
+      // Modal management
+      function showInterfaceModal() {
+        document.getElementById('interfaceModal').classList.remove('hidden');
+        loadInterfaces();
+      }
+
+      function hideInterfaceModal() {
+        document.getElementById('interfaceModal').classList.add('hidden');
+      }
+
+      // Loa<!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -101,8 +116,7 @@
         border-radius: 0.25rem;
       }
       .packet-item {
-        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
-          monospace;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
         font-size: 0.75rem;
         padding: 0.25rem;
         margin-bottom: 0.25rem;
@@ -128,10 +142,59 @@
         <h1 class="text-2xl md:text-3xl font-bold mb-2 md:mb-0">
           🔍 Enhanced Network Monitor
         </h1>
-        <div class="small text-gray-400">
-          Real-time packet analysis & flow mapping
+        <div class="flex items-center space-x-4">
+          <button id="interfaceBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-medium">
+            Select Interface
+          </button>
+          <div class="small text-gray-400">Real-time packet analysis</div>
         </div>
       </header>
+
+      <!-- Interface Selection Modal -->
+      <div id="interfaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+          <div class="bg-slate-800 rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
+            <h3 class="text-xl font-bold mb-4">Select Network Interface</h3>
+            <div id="interfaceList" class="space-y-2 mb-4">
+              <!-- Interface list will be populated here -->
+            </div>
+            <div class="flex justify-between">
+              <button id="windowsFixBtn" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-sm hidden">
+                Fix Windows Firewall
+              </button>
+              <div class="flex space-x-2">
+                <button id="testAllBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">
+                  Test All
+                </button>
+                <button id="closeModalBtn" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm">
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Status and Alerts Bar -->
+      <div class="bg-slate-800 rounded-lg p-4 mb-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex items-center space-x-6">
+            <div class="flex items-center space-x-2">
+              <div id="captureStatus" class="w-3 h-3 bg-gray-500 rounded-full"></div>
+              <span class="text-sm">Capture: <span id="captureStatusText">Unknown</span></span>
+            </div>
+            <div class="text-sm">
+              Interface: <span id="currentInterface" class="font-mono bg-slate-700 px-2 py-1 rounded">None</span>
+            </div>
+            <div class="text-sm">
+              Packets: <span id="captureCount" class="font-mono">0</span>
+            </div>
+          </div>
+          <div class="text-xs text-gray-400" id="lastUpdate">
+            Last update: Never
+          </div>
+        </div>
+      </div>
 
       <!-- Enhanced Stats Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -153,14 +216,8 @@
           </div>
           <div class="mt-2">
             <div class="flex justify-between text-sm">
-              <span
-                >📤 Sent:
-                <span id="packetsSent" class="font-mono">0</span></span
-              >
-              <span
-                >📥 Received:
-                <span id="packetsReceived" class="font-mono">0</span></span
-              >
+              <span>📤 Sent: <span id="packetsSent" class="font-mono">0</span></span>
+              <span>📥 Received: <span id="packetsReceived" class="font-mono">0</span></span>
             </div>
           </div>
         </div>
@@ -223,14 +280,8 @@
 
         <div class="card">
           <div class="small mb-2">🕸️ Network Topology</div>
-          <div
-            id="networkTopology"
-            class="h-64 bg-slate-900 rounded border relative overflow-hidden"
-          >
-            <div
-              id="topologyEmpty"
-              class="absolute inset-0 flex items-center justify-center text-sm text-gray-400"
-            >
+          <div id="networkTopology" class="h-64 bg-slate-900 rounded border relative overflow-hidden">
+            <div id="topologyEmpty" class="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
               Building network map...
             </div>
           </div>
@@ -306,16 +357,8 @@
 
       // Color palettes
       const colorPalette = [
-        "#60a5fa",
-        "#34d399",
-        "#f97316",
-        "#ef4444",
-        "#a78bfa",
-        "#f59e0b",
-        "#06b6d4",
-        "#fb7185",
-        "#10b981",
-        "#8b5cf6",
+        "#60a5fa", "#34d399", "#f97316", "#ef4444", "#a78bfa", 
+        "#f59e0b", "#06b6d4", "#fb7185", "#10b981", "#8b5cf6"
       ];
 
       // Format number with commas
@@ -325,11 +368,11 @@
 
       // Format bytes
       function formatBytes(bytes) {
-        if (bytes === 0) return "0 B";
+        if (bytes === 0) return '0 B';
         const k = 1024;
-        const sizes = ["B", "KB", "MB", "GB"];
+        const sizes = ['B', 'KB', 'MB', 'GB'];
         const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
       }
 
       // Mechanical counter animation
@@ -377,125 +420,93 @@
       // Create/Update Charts
       function createCharts(data) {
         // Destroy existing charts
-        [
-          protocolChart,
-          ipChart,
-          portChart,
-          sizeChart,
-          bandwidthChart,
-          appProtocolChart,
-          appBandwidthChart,
-        ].forEach((chart) => {
+        [protocolChart, ipChart, portChart, sizeChart, bandwidthChart, 
+         appProtocolChart, appBandwidthChart].forEach(chart => {
           if (chart) {
-            try {
-              chart.destroy();
-            } catch (e) {}
+            try { chart.destroy(); } catch(e) {}
           }
         });
 
         // Application Protocol Chart
-        const appProtoLabels =
-          data && data.app_protocols ? Object.keys(data.app_protocols) : [];
-        const appProtoData =
-          data && data.app_protocols ? Object.values(data.app_protocols) : [];
-        appProtocolChart = new Chart(
-          document.getElementById("appProtocolChart"),
-          {
-            type: "doughnut",
-            data: {
-              labels: appProtoLabels,
-              datasets: [
-                {
-                  data: appProtoData,
-                  backgroundColor: colorPalette.slice(0, appProtoLabels.length),
-                  borderColor: colorPalette
-                    .slice(0, appProtoLabels.length)
-                    .map(() => "#0f172a"),
-                  borderWidth: 1,
-                },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              plugins: {
-                legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
-                tooltip: {
-                  backgroundColor: "#1e293b",
-                  titleColor: "#e6eef8",
-                  bodyColor: "#e6eef8",
-                },
+        const appProtoLabels = data && data.app_protocols ? Object.keys(data.app_protocols) : [];
+        const appProtoData = data && data.app_protocols ? Object.values(data.app_protocols) : [];
+        appProtocolChart = new Chart(document.getElementById("appProtocolChart"), {
+          type: "doughnut",
+          data: {
+            labels: appProtoLabels,
+            datasets: [{
+              data: appProtoData,
+              backgroundColor: colorPalette.slice(0, appProtoLabels.length),
+              borderColor: colorPalette.slice(0, appProtoLabels.length).map(() => "#0f172a"),
+              borderWidth: 1,
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
               },
             },
-          }
-        );
+          },
+        });
 
         // Application Bandwidth Chart
         const appBwData = data && data.app_bandwidth ? data.app_bandwidth : {};
         const appNames = Object.keys(appBwData).slice(0, 8);
-        const appBwValues = appNames.map((name) => appBwData[name].total);
-
-        appBandwidthChart = new Chart(
-          document.getElementById("appBandwidthChart"),
-          {
-            type: "bar",
-            data: {
-              labels: appNames.map((name) =>
-                name.length > 15 ? name.substring(0, 12) + "..." : name
-              ),
-              datasets: [
-                {
-                  label: "Total Bytes",
-                  data: appBwValues,
-                  backgroundColor: colorPalette[2],
-                  borderColor: colorPalette[2],
-                  borderWidth: 1,
-                },
-              ],
-            },
-            options: {
-              responsive: true,
-              maintainAspectRatio: false,
-              indexAxis: "y",
-              plugins: {
-                legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
-                tooltip: {
-                  backgroundColor: "#1e293b",
-                  titleColor: "#e6eef8",
-                  bodyColor: "#e6eef8",
-                  callbacks: {
-                    label: (context) =>
-                      `${context.dataset.label}: ${formatBytes(context.raw)}`,
-                  },
-                },
-              },
-              scales: {
-                x: { ticks: { color: "#e6eef8", font: { size: 9 } } },
-                y: { ticks: { color: "#e6eef8", font: { size: 9 } } },
+        const appBwValues = appNames.map(name => appBwData[name].total);
+        
+        appBandwidthChart = new Chart(document.getElementById("appBandwidthChart"), {
+          type: "bar",
+          data: {
+            labels: appNames.map(name => name.length > 15 ? name.substring(0, 12) + '...' : name),
+            datasets: [{
+              label: "Total Bytes",
+              data: appBwValues,
+              backgroundColor: colorPalette[2],
+              borderColor: colorPalette[2],
+              borderWidth: 1
+            }],
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y',
+            plugins: {
+              legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
+              tooltip: {
+                backgroundColor: "#1e293b",
+                titleColor: "#e6eef8",
+                bodyColor: "#e6eef8",
+                callbacks: {
+                  label: (context) => `${context.dataset.label}: ${formatBytes(context.raw)}`
+                }
               },
             },
-          }
-        );
+            scales: {
+              x: { ticks: { color: "#e6eef8", font: { size: 9 } } },
+              y: { ticks: { color: "#e6eef8", font: { size: 9 } } },
+            },
+          },
+        });
 
         // Network Protocol Chart
-        const protoLabels =
-          data && data.protocols ? Object.keys(data.protocols) : [];
-        const protoData =
-          data && data.protocols ? Object.values(data.protocols) : [];
+        const protoLabels = data && data.protocols ? Object.keys(data.protocols) : [];
+        const protoData = data && data.protocols ? Object.values(data.protocols) : [];
         protocolChart = new Chart(document.getElementById("protocolChart"), {
           type: "doughnut",
           data: {
             labels: protoLabels,
-            datasets: [
-              {
-                data: protoData,
-                backgroundColor: colorPalette.slice(0, protoLabels.length),
-                borderColor: colorPalette
-                  .slice(0, protoLabels.length)
-                  .map(() => "#0f172a"),
-                borderWidth: 1,
-              },
-            ],
+            datasets: [{
+              data: protoData,
+              backgroundColor: colorPalette.slice(0, protoLabels.length),
+              borderColor: colorPalette.slice(0, protoLabels.length).map(() => "#0f172a"),
+              borderWidth: 1,
+            }],
           },
           options: {
             responsive: true,
@@ -512,24 +523,18 @@
         });
 
         // IP Chart
-        const ipLabels =
-          data && data.top_ips
-            ? data.top_ips.map((x) => x[0] + " (" + x[1] + ")")
-            : [];
-        const ipData =
-          data && data.top_ips ? data.top_ips.map((x) => x[1]) : [];
+        const ipLabels = data && data.top_ips ? data.top_ips.map(x => x[0] + " (" + x[1] + ")") : [];
+        const ipData = data && data.top_ips ? data.top_ips.map(x => x[1]) : [];
         ipChart = new Chart(document.getElementById("ipChart"), {
           type: "bar",
           data: {
             labels: ipLabels,
-            datasets: [
-              {
-                label: "Packets",
-                data: ipData,
-                backgroundColor: colorPalette[0],
-                borderColor: colorPalette[0],
-              },
-            ],
+            datasets: [{ 
+              label: "Packets", 
+              data: ipData,
+              backgroundColor: colorPalette[0],
+              borderColor: colorPalette[0]
+            }],
           },
           options: {
             responsive: true,
@@ -551,22 +556,18 @@
         });
 
         // Port Chart
-        const portLabels =
-          data && data.top_ports ? data.top_ports.map((x) => x[0]) : [];
-        const portData =
-          data && data.top_ports ? data.top_ports.map((x) => x[1]) : [];
+        const portLabels = data && data.top_ports ? data.top_ports.map(x => x[0]) : [];
+        const portData = data && data.top_ports ? data.top_ports.map(x => x[1]) : [];
         portChart = new Chart(document.getElementById("portChart"), {
           type: "bar",
           data: {
             labels: portLabels,
-            datasets: [
-              {
-                label: "Hits",
-                data: portData,
-                backgroundColor: colorPalette[1],
-                borderColor: colorPalette[1],
-              },
-            ],
+            datasets: [{ 
+              label: "Hits", 
+              data: portData,
+              backgroundColor: colorPalette[1],
+              borderColor: colorPalette[1]
+            }],
           },
           options: {
             responsive: true,
@@ -587,22 +588,18 @@
         });
 
         // Size Chart
-        const sizeLabels =
-          data && data.packet_sizes ? data.packet_sizes.map((x) => x[0]) : [];
-        const sizeData =
-          data && data.packet_sizes ? data.packet_sizes.map((x) => x[1]) : [];
+        const sizeLabels = data && data.packet_sizes ? data.packet_sizes.map(x => x[0]) : [];
+        const sizeData = data && data.packet_sizes ? data.packet_sizes.map(x => x[1]) : [];
         sizeChart = new Chart(document.getElementById("sizeChart"), {
           type: "bar",
           data: {
             labels: sizeLabels,
-            datasets: [
-              {
-                label: "Count",
-                data: sizeData,
-                backgroundColor: colorPalette[3],
-                borderColor: colorPalette[3],
-              },
-            ],
+            datasets: [{ 
+              label: "Count", 
+              data: sizeData,
+              backgroundColor: colorPalette[3],
+              borderColor: colorPalette[3]
+            }],
           },
           options: {
             responsive: true,
@@ -628,16 +625,14 @@
           type: "line",
           data: {
             labels: bw.map((_, i) => i - bw.length + "s"),
-            datasets: [
-              {
-                label: "Bytes/sec",
-                data: bw,
-                fill: true,
-                tension: 0.25,
-                backgroundColor: "rgba(96,165,250,0.15)",
-                borderColor: "#60a5fa",
-              },
-            ],
+            datasets: [{
+              label: "Bytes/sec",
+              data: bw,
+              fill: true,
+              tension: 0.25,
+              backgroundColor: "rgba(96,165,250,0.15)",
+              borderColor: "#60a5fa",
+            }],
           },
           options: {
             responsive: true,
@@ -651,8 +646,8 @@
                 titleColor: "#e6eef8",
                 bodyColor: "#e6eef8",
                 callbacks: {
-                  label: (context) => `${formatBytes(context.raw)}/sec`,
-                },
+                  label: (context) => `${formatBytes(context.raw)}/sec`
+                }
               },
             },
             scales: {
@@ -673,102 +668,86 @@
       function updateNetworkTopology(topologyData) {
         const container = document.getElementById("networkTopology");
         const emptyMsg = document.getElementById("topologyEmpty");
-
+        
         // Clear previous visualization
         d3.select(container).select("svg").remove();
-
+        
         if (!topologyData || topologyData.length === 0) {
           emptyMsg.style.display = "";
           return;
         }
-
+        
         emptyMsg.style.display = "none";
-
+        
         const width = container.clientWidth;
         const height = container.clientHeight;
-
-        const svg = d3
-          .select(container)
+        
+        const svg = d3.select(container)
           .append("svg")
           .attr("width", width)
           .attr("height", height);
 
         // Extract nodes and links
-        const nodes = Array.from(
-          new Set(topologyData.flatMap((d) => [d.source, d.target]))
-        ).map((id) => ({ id, group: id.startsWith("192.168.") ? 1 : 2 }));
+        const nodes = Array.from(new Set(
+          topologyData.flatMap(d => [d.source, d.target])
+        )).map(id => ({ id, group: id.startsWith("192.168.") ? 1 : 2 }));
 
-        const links = topologyData.map((d) => ({
-          source: d.source,
-          target: d.target,
-        }));
+        const links = topologyData.map(d => ({ source: d.source, target: d.target }));
 
         // Create force simulation
-        const simulation = d3
-          .forceSimulation(nodes)
-          .force(
-            "link",
-            d3
-              .forceLink(links)
-              .id((d) => d.id)
-              .distance(50)
-          )
+        const simulation = d3.forceSimulation(nodes)
+          .force("link", d3.forceLink(links).id(d => d.id).distance(50))
           .force("charge", d3.forceManyBody().strength(-100))
           .force("center", d3.forceCenter(width / 2, height / 2))
           .force("collision", d3.forceCollide().radius(15));
 
         // Add links
-        const link = svg
-          .append("g")
+        const link = svg.append("g")
           .selectAll("line")
           .data(links)
           .join("line")
           .attr("class", "network-link");
 
         // Add nodes
-        const node = svg
-          .append("g")
+        const node = svg.append("g")
           .selectAll("circle")
           .data(nodes)
           .join("circle")
           .attr("class", "network-node")
           .attr("r", 8)
-          .attr("fill", (d) => (d.group === 1 ? "#34d399" : "#60a5fa"))
-          .call(
-            d3
-              .drag()
-              .on("start", dragstarted)
-              .on("drag", dragged)
-              .on("end", dragended)
-          );
+          .attr("fill", d => d.group === 1 ? "#34d399" : "#60a5fa")
+          .call(d3.drag()
+            .on("start", dragstarted)
+            .on("drag", dragged)
+            .on("end", dragended));
 
         // Add labels
-        const label = svg
-          .append("g")
+        const label = svg.append("g")
           .selectAll("text")
           .data(nodes)
           .join("text")
           .attr("class", "network-text")
-          .text((d) => d.id.split(".").slice(-1)[0]) // Show only last octet
+          .text(d => d.id.split('.').slice(-1)[0]) // Show only last octet
           .attr("dy", -12);
 
         // Tooltip
-        node
-          .append("title")
-          .text(
-            (d) => `IP: ${d.id}\nType: ${d.group === 1 ? "Local" : "External"}`
-          );
+        node.append("title")
+          .text(d => `IP: ${d.id}\nType: ${d.group === 1 ? 'Local' : 'External'}`);
 
         simulation.on("tick", () => {
           link
-            .attr("x1", (d) => d.source.x)
-            .attr("y1", (d) => d.source.y)
-            .attr("x2", (d) => d.target.x)
-            .attr("y2", (d) => d.target.y);
+            .attr("x1", d => d.source.x)
+            .attr("y1", d => d.source.y)
+            .attr("x2", d => d.target.x)
+            .attr("y2", d => d.target.y);
 
-          node.attr("cx", (d) => d.x).attr("cy", (d) => d.y);
+          node
+            .attr("cx", d => d.x)
+            .attr("cy", d => d.y);
 
-          label.attr("x", (d) => d.x).attr("y", (d) => d.y);
+          label
+            .attr("x", d => d.x)
+            .attr("y", d => d.y);
         });
 
         function dragstarted(event, d) {
@@ -797,15 +776,14 @@
         container.innerHTML = "";
 
         if (!flows || flows.length === 0) {
-          container.innerHTML =
-            '<div class="text-gray-400 text-center py-4">No traffic flows detected</div>';
+          container.innerHTML = '<div class="text-gray-400 text-center py-4">No traffic flows detected</div>';
           return;
         }
 
         flows.slice(0, 10).forEach(([flow, packets, bytes]) => {
-          const [src, dst] = flow.split(":");
-          const flowDiv = document.createElement("div");
-          flowDiv.className = "flow-item";
+          const [src, dst] = flow.split(':');
+          const flowDiv = document.createElement('div');
+          flowDiv.className = 'flow-item';
           flowDiv.innerHTML = `
             <div class="flex justify-between items-center mb-1">
               <div class="font-mono text-xs">
@@ -816,7 +794,7 @@
             </div>
             <div class="flex justify-between text-xs text-gray-300">
               <span>📦 ${packets} packets</span>
-              <span>⚡ ${(bytes / packets).toFixed(0)} B/pkt avg</span>
+              <span>⚡ ${(bytes/packets).toFixed(0)} B/pkt avg</span>
             </div>
           `;
           container.appendChild(flowDiv);
@@ -829,21 +807,18 @@
         container.innerHTML = "";
 
         if (!packets || packets.length === 0) {
-          container.innerHTML =
-            '<div class="text-gray-400 text-center py-4">No packet data available</div>';
+          container.innerHTML = '<div class="text-gray-400 text-center py-4">No packet data available</div>';
           return;
         }
 
-        packets.slice(0, 50).forEach((pkt) => {
+        packets.slice(0, 50).forEach(pkt => {
           const time = new Date(pkt.timestamp * 1000).toLocaleTimeString();
-          const pktDiv = document.createElement("div");
-          pktDiv.className = `packet-item ${
-            pkt.direction === "sent" ? "packet-sent" : "packet-received"
-          }`;
-
-          const dirIcon = pkt.direction === "sent" ? "📤" : "📥";
-          const processInfo = pkt.process ? ` [${pkt.process}]` : "";
-
+          const pktDiv = document.createElement('div');
+          pktDiv.className = `packet-item ${pkt.direction === 'sent' ? 'packet-sent' : 'packet-received'}`;
+          
+          const dirIcon = pkt.direction === 'sent' ? '📤' : '📥';
+          const processInfo = pkt.process ? ` [${pkt.process}]` : '';
+          
           pktDiv.innerHTML = `
             <div class="flex justify-between items-start">
               <div class="flex-1 min-w-0">
@@ -851,19 +826,11 @@
                   <span>${dirIcon}</span>
                   <span class="text-gray-300">${time}</span>
                   <span class="text-blue-300">${pkt.protocol}</span>
-                  ${
-                    pkt.app_protocol !== "Unknown"
-                      ? `<span class="text-purple-300">${pkt.app_protocol}</span>`
-                      : ""
-                  }
+                  ${pkt.app_protocol !== 'Unknown' ? `<span class="text-purple-300">${pkt.app_protocol}</span>` : ''}
                 </div>
                 <div class="text-xs mt-1 truncate">
-                  <span class="text-orange-300">${pkt.src}</span>${
-            pkt.sport ? `:${pkt.sport}` : ""
-          } → 
-                  <span class="text-green-300">${pkt.dst}</span>${
-            pkt.dport ? `:${pkt.dport}` : ""
-          }
+                  <span class="text-orange-300">${pkt.src}</span>${pkt.sport ? `:${pkt.sport}` : ''} → 
+                  <span class="text-green-300">${pkt.dst}</span>${pkt.dport ? `:${pkt.dport}` : ''}
                   ${processInfo}
                 </div>
               </div>
@@ -872,7 +839,7 @@
           `;
           container.appendChild(pktDiv);
         });
-
+        
         // Auto-scroll to top for new packets
         container.scrollTop = 0;
       }
@@ -887,10 +854,10 @@
       function updateMap(points) {
         try {
           map.invalidateSize();
-          markers.forEach((m) => map.removeLayer(m));
+          markers.forEach(m => map.removeLayer(m));
           markers = [];
 
-          (points || []).forEach((p) => {
+          (points || []).forEach(p => {
             if (p && p.lat != null && p.lon != null) {
               const lat = parseFloat(p.lat);
               const lon = parseFloat(p.lon);
@@ -898,9 +865,7 @@
                 const marker = L.marker([lat, lon])
                   .addTo(map)
                   .bindPopup(
-                    `<strong>${p.ip}</strong><br>${p.country || ""} ${
-                      p.city || ""
-                    }<br>Packets: ${p.count}`
+                    `<strong>${p.ip}</strong><br>${p.country || ""} ${p.city || ""}<br>Packets: ${p.count}`
                   );
                 markers.push(marker);
               }
@@ -913,20 +878,15 @@
           } else {
             if (empty) empty.style.display = "none";
             if (markers.length === 1) {
-              try {
-                map.setView(markers[0].getLatLng(), 4);
-              } catch (e) {}
+              try { map.setView(markers[0].getLatLng(), 4); } catch(e) {}
             } else if (markers.length > 1) {
               try {
                 const group = L.featureGroup(markers);
-                map.fitBounds(group.getBounds(), {
-                  maxZoom: 5,
-                  padding: [20, 20],
-                });
-              } catch (e) {}
+                map.fitBounds(group.getBounds(), { maxZoom: 5, padding: [20, 20] });
+              } catch(e) {}
             }
           }
-        } catch (e) {
+        } catch(e) {
           console.error("Map update error", e);
         }
       }
@@ -937,23 +897,16 @@
         node.innerHTML = "";
         if (!Array.isArray(list) || list.length === 0) return;
 
-        list.forEach((a) => {
+        list.forEach(a => {
           if (!a) return;
           const severity = a.severity || "info";
-          const timeSec =
-            typeof a.time === "number" ? a.time : Date.now() / 1000;
+          const timeSec = typeof a.time === "number" ? a.time : Date.now() / 1000;
           const dt = new Date(timeSec * 1000);
-          const badgeColor =
-            severity === "error"
-              ? "bg-red-500"
-              : severity === "warn"
-              ? "bg-yellow-400"
-              : "bg-blue-400";
+          const badgeColor = severity === "error" ? "bg-red-500" : 
+                           severity === "warn" ? "bg-yellow-400" : "bg-blue-400";
 
           const li = document.createElement("li");
-          li.innerHTML = `<span class="badge ${badgeColor}">${severity.toUpperCase()}</span> <span class="text-xs text-gray-300">${dt.toLocaleTimeString()}</span> — ${
-            a.msg || ""
-          }`;
+          li.innerHTML = `<span class="badge ${badgeColor}">${severity.toUpperCase()}</span> <span class="text-xs text-gray-300">${dt.toLocaleTimeString()}</span> — ${a.msg || ""}`;
           node.appendChild(li);
         });
       }
@@ -963,15 +916,11 @@
         node.innerHTML = "";
         if (!Array.isArray(list)) return;
 
-        list.forEach((log) => {
+        list.forEach(log => {
           if (!log) return;
           const dt = new Date(log.time * 1000).toLocaleTimeString();
-          const color =
-            log.level === "error"
-              ? "text-red-400"
-              : log.level === "warn"
-              ? "text-yellow-300"
-              : "text-blue-300";
+          const color = log.level === "error" ? "text-red-400" :
+                       log.level === "warn" ? "text-yellow-300" : "text-blue-300";
 
           const li = document.createElement("li");
           li.className = `mb-1 ${color}`;
@@ -987,77 +936,53 @@
           const data = await res.json();
 
           // Update counters
-          mechanicalCounter(
-            document.getElementById("totalPackets"),
-            data.total_packets,
-            1400,
-            12
-          );
-          document.getElementById("activeConnections").innerText =
-            data.active_connections;
-
+          mechanicalCounter(document.getElementById("totalPackets"), data.total_packets, 1400, 12);
+          document.getElementById("activeConnections").innerText = data.active_connections;
+          
           // Update packet direction counters
-          document.getElementById("packetsSent").innerText = formatNumber(
-            data.packet_directions?.sent || 0
-          );
-          document.getElementById("packetsReceived").innerText = formatNumber(
-            data.packet_directions?.received || 0
-          );
+          document.getElementById("packetsSent").innerText = formatNumber(data.packet_directions?.sent || 0);
+          document.getElementById("packetsReceived").innerText = formatNumber(data.packet_directions?.received || 0);
 
           // Update existing charts
           if (protocolChart && data.protocols) {
             const protoLabels = Object.keys(data.protocols);
             protocolChart.data.labels = protoLabels;
             protocolChart.data.datasets[0].data = Object.values(data.protocols);
-            protocolChart.data.datasets[0].backgroundColor = colorPalette.slice(
-              0,
-              protoLabels.length
-            );
+            protocolChart.data.datasets[0].backgroundColor = colorPalette.slice(0, protoLabels.length);
             protocolChart.update();
           }
 
           if (appProtocolChart && data.app_protocols) {
             const appProtoLabels = Object.keys(data.app_protocols);
             appProtocolChart.data.labels = appProtoLabels;
-            appProtocolChart.data.datasets[0].data = Object.values(
-              data.app_protocols
-            );
-            appProtocolChart.data.datasets[0].backgroundColor =
-              colorPalette.slice(0, appProtoLabels.length);
+            appProtocolChart.data.datasets[0].data = Object.values(data.app_protocols);
+            appProtocolChart.data.datasets[0].backgroundColor = colorPalette.slice(0, appProtoLabels.length);
             appProtocolChart.update();
           }
 
           if (appBandwidthChart && data.app_bandwidth) {
             const appNames = Object.keys(data.app_bandwidth).slice(0, 8);
-            const appBwValues = appNames.map(
-              (name) => data.app_bandwidth[name].total
-            );
-            appBandwidthChart.data.labels = appNames.map((name) =>
-              name.length > 15 ? name.substring(0, 12) + "..." : name
-            );
+            const appBwValues = appNames.map(name => data.app_bandwidth[name].total);
+            appBandwidthChart.data.labels = appNames.map(name => name.length > 15 ? name.substring(0, 12) + '...' : name);
             appBandwidthChart.data.datasets[0].data = appBwValues;
             appBandwidthChart.update();
           }
 
           if (ipChart && data.top_ips) {
-            ipChart.data.labels = data.top_ips.map(
-              (x) => x[0] + " (" + x[1] + ")"
-            );
-            ipChart.data.datasets[0].data = data.top_ips.map((x) => x[1]);
+            ipChart.data.labels = data.top_ips.map(x => x[0] + " (" + x[1] + ")");
+            ipChart.data.datasets[0].data = data.top_ips.map(x => x[1]);
             ipChart.update();
           }
 
           if (portChart && data.top_ports) {
-            portChart.data.labels = data.top_ports.map((x) => x[0]);
-            portChart.data.datasets[0].data = data.top_ports.map((x) => x[1]);
+            portChart.data.labels = data.top_ports.map(x => x[0]);
+            portChart.data.datasets[0].data = data.top_ports.map(x => x[1]);
             portChart.update();
           }
 
           if (sizeChart && data.packet_sizes) {
-            sizeChart.data.labels = data.packet_sizes.map((x) => x[0]);
-            sizeChart.data.datasets[0].data = data.packet_sizes.map(
-              (x) => x[1]
-            );
+            sizeChart.data.labels = data.packet_sizes.map(x => x[0]);
+            sizeChart.data.datasets[0].data = data.packet_sizes.map(x => x[1]);
             sizeChart.update();
           }
 
@@ -1066,9 +991,7 @@
           if (bandwidthChart) {
             if (!_bandwidthInitialized) {
               bandwidthChart.data.datasets[0].data = bw.slice();
-              bandwidthChart.data.labels = bw.map(
-                (_, i) => i - bw.length + "s"
-              );
+              bandwidthChart.data.labels = bw.map((_, i) => i - bw.length + "s");
               bandwidthChart.update();
               _bandwidthInitialized = true;
             } else if (bw.length > 0) {
@@ -1078,9 +1001,7 @@
                 bandwidthChart.data.datasets[0].data.shift();
               }
               const arr = bandwidthChart.data.datasets[0].data;
-              bandwidthChart.data.labels = arr.map(
-                (_, i) => i - arr.length + "s"
-              );
+              bandwidthChart.data.labels = arr.map((_, i) => i - arr.length + "s");
               bandwidthChart.update();
             }
           }
@@ -1089,15 +1010,16 @@
           updateTrafficFlows(data.traffic_flows);
           updateNetworkTopology(data.network_topology);
           updatePacketDetails(data.detailed_packets);
-
+          
           // Update standard components
           renderAlerts(data.alerts);
           updateMap(data.geo_points);
           renderLogs(data.logs || []);
+
         } catch (e) {
           console.error("Fetch error:", e);
         }
-
+        
         setTimeout(fetchData, 2000);
       }
 
@@ -1106,7 +1028,7 @@
       fetchData();
 
       // Handle window resize for topology
-      window.addEventListener("resize", () => {
+      window.addEventListener('resize', () => {
         if (networkSimulation) {
           const container = document.getElementById("networkTopology");
           const svg = d3.select(container).select("svg");
@@ -1114,9 +1036,7 @@
             const width = container.clientWidth;
             const height = container.clientHeight;
             svg.attr("width", width).attr("height", height);
-            networkSimulation
-              .force("center", d3.forceCenter(width / 2, height / 2))
-              .restart();
+            networkSimulation.force("center", d3.forceCenter(width / 2, height / 2)).restart();
           }
         }
       });

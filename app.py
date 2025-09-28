@@ -117,6 +117,191 @@ if GEOIP2_AVAILABLE and os.path.exists(GEOIP_DB_PATH):
 
 
 # ---------------------------
+# Windows Firewall Workaround
+# ---------------------------
+def create_windows_firewall_rule():
+    """Create Windows Firewall rule for Python packet capture"""
+    if platform.system() != "Windows":
+        return True
+
+    try:
+        import subprocess
+        import sys
+
+        # Get Python executable path
+        python_exe = sys.executable
+
+        # Create inbound rule
+        cmd_in = [
+            "netsh",
+            "advfirewall",
+            "firewall",
+            "add",
+            "rule",
+            "name=Python Packet Sniffer Inbound",
+            "dir=in",
+            "action=allow",
+            f"program={python_exe}",
+            "enable=yes",
+        ]
+
+        # Create outbound rule
+        cmd_out = [
+            "netsh",
+            "advfirewall",
+            "firewall",
+            "add",
+            "rule",
+            "name=Python Packet Sniffer Outbound",
+            "dir=out",
+            "action=allow",
+            f"program={python_exe}",
+            "enable=yes",
+        ]
+
+        # Try to create rules
+        result_in = subprocess.run(cmd_in, capture_output=True, text=True)
+        result_out = subprocess.run(cmd_out, capture_output=True, text=True)
+
+        if result_in.returncode == 0 and result_out.returncode == 0:
+            log("Windows Firewall rules created successfully")
+            return True
+        else:
+            log("Failed to create Windows Firewall rules (may already exist)", "warn")
+            return True  # Don't fail if rules already exist
+
+    except Exception as e:
+        log(f"Could not create firewall rules: {e}", "warn")
+        return True  # Don't fail the app if firewall rules can't be created
+
+
+def check_windows_capture_requirements():
+    """Check and fix Windows-specific requirements"""
+    if platform.system() != "Windows":
+        return True
+
+    log("Checking Windows packet capture requirements...")
+
+    # Check if Npcap service is running
+    try:
+        import subprocess
+
+        result = subprocess.run(
+            ["sc", "query", "npf"], capture_output=True, text=True, shell=True
+        )
+        if result.returncode == 0 and "RUNNING" in result.stdout:
+            log("NPF service is running")
+        else:
+            log("Attempting to start NPF service...", "warn")
+            start_result = subprocess.run(
+                ["net", "start", "npf"], capture_output=True, text=True, shell=True
+            )
+            if start_result.returncode == 0:
+                log("NPF service started successfully")
+            else:
+                log("Could not start NPF service - packet capture may fail", "error")
+    except Exception as e:
+        log(f"Error checking NPF service: {e}", "warn")
+
+    # Try to create firewall rules
+    create_windows_firewall_rule()
+
+    return True
+
+
+# ---------------------------
+# Enhanced Interface Detection and Selection
+# ---------------------------
+def get_detailed_interfaces():
+    """Get detailed information about network interfaces"""
+    interfaces_info = []
+
+    try:
+        from scapy.all import get_if_list, get_if_addr, get_if_hwaddr
+        import psutil
+
+        scapy_interfaces = get_if_list()
+        psutil_interfaces = psutil.net_if_addrs()
+
+        for iface in scapy_interfaces:
+            info = {
+                "name": iface,
+                "description": iface,
+                "ip": "Unknown",
+                "mac": "Unknown",
+                "active": False,
+                "type": "Unknown",
+            }
+
+            # Get IP address
+            try:
+                info["ip"] = get_if_addr(iface)
+            except:
+                pass
+
+            # Get MAC address
+            try:
+                info["mac"] = get_if_hwaddr(iface)
+            except:
+                pass
+
+            # Get additional info from psutil
+            if iface in psutil_interfaces:
+                addrs = psutil_interfaces[iface]
+                for addr in addrs:
+                    if addr.family == 2:  # IPv4
+                        info["ip"] = addr.address
+                        info["active"] = True
+                    elif addr.family == 17:  # MAC
+                        info["mac"] = addr.address
+
+            # Determine interface type
+            if "loopback" in iface.lower() or "lo" in iface.lower():
+                info["type"] = "Loopback"
+            elif "wifi" in iface.lower() or "wlan" in iface.lower():
+                info["type"] = "WiFi"
+            elif "ethernet" in iface.lower() or "eth" in iface.lower():
+                info["type"] = "Ethernet"
+            elif "vmware" in iface.lower() or "virtualbox" in iface.lower():
+                info["type"] = "Virtual"
+            else:
+                info["type"] = "Other"
+
+            interfaces_info.append(info)
+
+        # Sort by active status and type preference
+        interfaces_info.sort(
+            key=lambda x: (
+                not x["active"],  # Active interfaces first
+                x["type"] == "Loopback",  # Loopback last
+                x["type"] == "Virtual",  # Virtual second to last
+                x["name"],
+            )
+        )
+
+    except Exception as e:
+        log(f"Error getting detailed interface info: {e}", "error")
+        # Fallback to basic interface list
+        try:
+            basic_interfaces = get_if_list()
+            for iface in basic_interfaces:
+                interfaces_info.append(
+                    {
+                        "name": iface,
+                        "description": iface,
+                        "ip": "Unknown",
+                        "mac": "Unknown",
+                        "active": True,
+                        "type": "Unknown",
+                    }
+                )
+        except:
+            pass
+
+    return interfaces_info
+
+
+# ---------------------------
 # Logging helper
 # ---------------------------
 def log(msg, level="info"):
@@ -134,9 +319,6 @@ def log(msg, level="info"):
         print(f"[{level}] {msg}")
 
 
-# ---------------------------
-# System Detection and Interface Selection
-# ---------------------------
 def detect_system_info():
     """Detect system information and available interfaces"""
     system = platform.system()
@@ -156,29 +338,29 @@ def detect_system_info():
 
     log(f"Running with admin/root privileges: {is_admin}")
 
-    # Get network interfaces
-    try:
-        interfaces = get_if_list()
-        log(f"Available network interfaces: {interfaces}")
+    # Windows-specific setup
+    if system == "Windows":
+        check_windows_capture_requirements()
 
-        # Filter out loopback and select best interface
-        filtered_interfaces = [
-            iface
-            for iface in interfaces
-            if not iface.startswith(("lo", "Loopback", "Software Loopback"))
-        ]
+    # Get detailed interface information
+    interfaces_info = get_detailed_interfaces()
+    log(f"Detected {len(interfaces_info)} network interfaces")
 
-        if filtered_interfaces:
-            selected_interface = filtered_interfaces[0]
-            log(f"Selected interface: {selected_interface}")
-            return selected_interface, is_admin
-        else:
-            log("No suitable network interfaces found, using default", "warn")
-            return None, is_admin
+    for info in interfaces_info[:5]:  # Log first 5 interfaces
+        log(f"Interface: {info['name']} ({info['type']}) - {info['ip']}")
 
-    except Exception as e:
-        log(f"Error getting network interfaces: {e}", "error")
-        return None, is_admin
+    # Select best interface (first active non-loopback)
+    selected_interface = None
+    for info in interfaces_info:
+        if info["active"] and info["type"] not in ["Loopback"]:
+            selected_interface = info["name"]
+            break
+
+    if not selected_interface and interfaces_info:
+        selected_interface = interfaces_info[0]["name"]
+
+    log(f"Selected interface: {selected_interface}")
+    return selected_interface, is_admin, interfaces_info
 
 
 # ---------------------------
@@ -288,6 +470,24 @@ def get_process_for_connection(src_ip, src_port, dst_ip, dst_port):
             return process_connections[key]
 
     return None
+
+
+# ---------------------------
+# Logging helper
+# ---------------------------
+def log(msg, level="info"):
+    entry = {"time": time.time(), "level": level, "msg": str(msg)}
+    with lock:
+        logs.appendleft(entry)
+    try:
+        if level == "error":
+            app.logger.error(msg)
+        elif level == "warn":
+            app.logger.warning(msg)
+        else:
+            app.logger.info(msg)
+    except Exception:
+        print(f"[{level}] {msg}")
 
 
 # ---------------------------
@@ -511,16 +711,112 @@ def process_packets_loop():
 # ---------------------------
 # Enhanced Packet Sniffing
 # ---------------------------
-def start_sniffer():
-    """Start the packet sniffer with enhanced error handling"""
-    log("Starting packet sniffer...")
+def test_packet_capture():
+    """Test basic packet capture functionality"""
+    log("Testing packet capture capabilities...")
+    try:
+        # Test 1: Check if we can import scapy properly
+        from scapy.all import sniff, get_if_list, conf
 
-    # Detect system and interface
-    interface, is_admin = detect_system_info()
+        log("Scapy import successful")
+
+        # Test 2: Check available interfaces
+        interfaces = get_if_list()
+        log(f"Available interfaces: {interfaces}")
+
+        # Test 3: Try a very short capture test
+        log("Testing 3-second packet capture...")
+        test_packets = []
+
+        def test_handler(pkt):
+            test_packets.append(pkt)
+            log(f"Test captured packet: {pkt.summary()[:50]}...")
+
+        try:
+            sniff(prn=test_handler, timeout=3, count=5, store=False)
+            log(f"Test capture completed: {len(test_packets)} packets captured")
+            return len(test_packets) > 0
+        except Exception as e:
+            log(f"Test capture failed: {e}", "error")
+            return False
+
+    except Exception as e:
+        log(f"Packet capture test failed: {e}", "error")
+        return False
+
+
+# Global variables for interface selection
+available_interfaces = []
+selected_capture_interface = None
+capture_thread_active = False
+
+
+# ---------------------------
+# Enhanced Packet Sniffing with Interface Selection
+# ---------------------------
+def test_packet_capture(interface=None):
+    """Test basic packet capture functionality on specific interface"""
+    log(f"Testing packet capture on interface: {interface or 'default'}")
+    try:
+        from scapy.all import sniff, get_if_list, conf
+
+        # Test capture with specific configuration
+        test_packets = []
+
+        def test_handler(pkt):
+            test_packets.append(pkt)
+            log(
+                f"Test captured packet on {interface or 'default'}: {pkt.summary()[:50]}..."
+            )
+
+        capture_args = {"prn": test_handler, "timeout": 3, "count": 3, "store": False}
+        if interface:
+            capture_args["iface"] = interface
+
+        try:
+            # Try with Windows-specific optimizations
+            if platform.system() == "Windows":
+                # Disable promiscuous mode for Windows compatibility
+                capture_args["promisc"] = False
+                # Set socket timeout for Windows
+                capture_args["timeout"] = 5
+
+            sniff(**capture_args)
+            log(
+                f"Test capture completed: {len(test_packets)} packets captured on {interface or 'default'}"
+            )
+            return len(test_packets) > 0, len(test_packets)
+        except Exception as e:
+            log(f"Test capture failed on {interface or 'default'}: {e}", "error")
+            return False, 0
+
+    except Exception as e:
+        log(f"Packet capture test failed: {e}", "error")
+        return False, 0
+
+
+def start_sniffer():
+    """Start the packet sniffer with enhanced error handling and interface selection"""
+    global available_interfaces, selected_capture_interface
+
+    log("Starting enhanced packet sniffer...")
+
+    # Detect system and interfaces
+    default_interface, is_admin, interfaces_info = detect_system_info()
+    available_interfaces = interfaces_info
+    selected_capture_interface = default_interface
 
     if not is_admin:
         log(
             "WARNING: Not running with admin/root privileges. Packet capture may fail!",
+            "warn",
+        )
+
+    # Windows-specific warnings and tips
+    if platform.system() == "Windows" and not is_admin:
+        log("Windows users: Run as Administrator for best results", "warn")
+        log(
+            "If capture fails: 1) Install Npcap, 2) Disable Windows Defender temporarily",
             "warn",
         )
 
@@ -532,69 +828,172 @@ def start_sniffer():
     processing_thread.start()
     log("Packet processing thread started")
 
-    # Start packet capture thread
+    # Start initial capture
+    start_capture_on_interface(selected_capture_interface)
+
+
+def start_capture_on_interface(interface_name):
+    """Start packet capture on specific interface"""
+    global capture_thread_active, selected_capture_interface
+
+    # Stop existing capture
+    capture_thread_active = False
+    time.sleep(1)  # Give existing thread time to stop
+
+    selected_capture_interface = interface_name
+    log(f"Starting packet capture on interface: {interface_name}")
+
     def capture_packets():
-        log("Starting packet capture thread...")
-        try:
-            # Try different capture methods
-            capture_args = {
-                "prn": packet_handler,
-                "store": False,
-                "count": 0,  # Capture indefinitely
+        global capture_thread_active
+        capture_thread_active = True
+
+        # Find interface info
+        interface_info = None
+        for info in available_interfaces:
+            if info["name"] == interface_name:
+                interface_info = info
+                break
+
+        log(
+            f"Capturing on: {interface_info['name'] if interface_info else 'default'} "
+            f"({interface_info['type'] if interface_info else 'unknown'}) - "
+            f"{interface_info['ip'] if interface_info else 'unknown IP'}"
+        )
+
+        # Prepare capture methods with Windows optimizations
+        capture_methods = []
+
+        if interface_name:
+            # Method 1: Specific interface, no promiscuous mode (Windows-friendly)
+            capture_methods.append(
+                {
+                    "method": f"Interface-specific ({interface_name}) - Windows optimized",
+                    "args": {
+                        "prn": packet_handler,
+                        "iface": interface_name,
+                        "store": False,
+                        "timeout": 1,
+                        "promisc": False,  # Windows compatibility
+                    },
+                }
+            )
+
+            # Method 2: Specific interface with promiscuous mode (Linux/Mac)
+            if platform.system() != "Windows":
+                capture_methods.append(
+                    {
+                        "method": f"Interface-specific ({interface_name}) - promiscuous",
+                        "args": {
+                            "prn": packet_handler,
+                            "iface": interface_name,
+                            "store": False,
+                            "timeout": 1,
+                            "promisc": True,
+                        },
+                    }
+                )
+
+        # Method 3: Default interface with filter
+        capture_methods.append(
+            {
+                "method": "Default interface with IP filter",
+                "args": {
+                    "prn": packet_handler,
+                    "filter": "ip",
+                    "store": False,
+                    "timeout": 1,
+                    "promisc": False,
+                },
             }
+        )
 
-            # Add interface if detected
-            if interface:
-                capture_args["iface"] = interface
-                log(f"Capturing on interface: {interface}")
-            else:
-                log("Capturing on default interface")
+        # Method 4: Default interface, no filter
+        capture_methods.append(
+            {
+                "method": "Default interface, no filter",
+                "args": {
+                    "prn": packet_handler,
+                    "store": False,
+                    "timeout": 1,
+                    "promisc": False,
+                },
+            }
+        )
 
-            # Set capture filter to reduce noise (optional)
-            # capture_args['filter'] = "ip"  # Only IP packets
+        # Try each method
+        for i, method in enumerate(capture_methods):
+            if not capture_thread_active:  # Stop if thread was deactivated
+                break
 
-            log("Starting Scapy sniff...")
-            capture_status["active"] = True
-            sniff(**capture_args)
-
-        except PermissionError:
-            error_msg = "Permission denied. Please run as administrator/root."
-            log(error_msg, "error")
-            capture_status["error"] = error_msg
-            capture_status["active"] = False
-
-        except Exception as e:
-            error_msg = f"Packet capture failed: {e}"
-            log(error_msg, "error")
-            capture_status["error"] = str(e)
-            capture_status["active"] = False
-
-            # Try alternative capture method
-            log("Trying alternative capture method...", "warn")
+            log(f"Trying capture method {i+1}: {method['method']}")
             try:
-                # Simplified capture without interface specification
-                sniff(prn=packet_handler, store=False)
-            except Exception as e2:
-                log(f"Alternative capture method also failed: {e2}", "error")
+                capture_status["active"] = True
+                capture_status["error"] = None
+
+                # Continuous capture loop
+                while capture_thread_active:
+                    try:
+                        sniff(count=10, **method["args"])  # Capture in small batches
+                    except KeyboardInterrupt:
+                        break
+                    except Exception as inner_e:
+                        if (
+                            capture_thread_active
+                        ):  # Only log if we're still supposed to be running
+                            log(f"Capture batch failed: {inner_e}", "debug")
+                        time.sleep(0.1)
+
+                break  # If we get here, capture is working
+
+            except PermissionError as e:
+                error_msg = f"Permission denied for {method['method']}: {e}"
+                log(error_msg, "error")
+                capture_status["error"] = error_msg
+
+            except OSError as e:
+                error_msg = f"OS Error for {method['method']}: {e}"
+                log(error_msg, "error")
+                capture_status["error"] = error_msg
+
+            except Exception as e:
+                error_msg = f"Failed {method['method']}: {e}"
+                log(error_msg, "warn")
+                capture_status["error"] = error_msg
+                continue
+
+        # If all methods failed
+        if capture_thread_active:
+            log("All capture methods failed", "error")
+            capture_status["active"] = False
 
     # Start capture in separate thread
     capture_thread = threading.Thread(target=capture_packets, daemon=True)
     capture_thread.start()
     log("Packet capture thread started")
 
-    # Monitor capture status
+    # Enhanced monitoring
     def monitor_capture():
         last_count = 0
-        while True:
-            time.sleep(10)  # Check every 10 seconds
+        no_packet_warnings = 0
+
+        while capture_thread_active:
+            time.sleep(10)
             current_count = capture_status["packets_captured"]
+
             if current_count > last_count:
-                log(f"Packet capture active: {current_count} packets captured")
+                log(f"Capture active on {interface_name}: {current_count} packets")
                 last_count = current_count
-            elif not capture_status["active"]:
-                log("Packet capture appears inactive", "warn")
-                if capture_status.get("error"):
-                    log(f"Capture error: {capture_status['error']}", "error")
+                no_packet_warnings = 0
+            else:
+                no_packet_warnings += 1
+                if no_packet_warnings == 3 and platform.system() == "Windows":
+                    log("Windows users: If no packets captured, try:", "warn")
+                    log(
+                        "1. Temporarily disable Windows Defender Real-time protection",
+                        "warn",
+                    )
+                    log("2. Run: ping google.com (in another terminal)", "warn")
+                    log("3. Browse to websites to generate traffic", "warn")
 
     monitor_thread = threading.Thread(target=monitor_capture, daemon=True)
     monitor_thread.start()
@@ -611,7 +1010,95 @@ def index():
 @app.route("/status")
 def status():
     """Get capture status for debugging"""
-    return jsonify(capture_status)
+    return jsonify(
+        {
+            **capture_status,
+            "selected_interface": selected_capture_interface,
+            "available_interfaces": available_interfaces[:10],  # Limit for performance
+        }
+    )
+
+
+@app.route("/interfaces")
+def get_interfaces():
+    """Get available network interfaces"""
+    return jsonify(
+        {"interfaces": available_interfaces, "selected": selected_capture_interface}
+    )
+
+
+@app.route("/select_interface", methods=["POST"])
+def select_interface():
+    """Select network interface for packet capture"""
+    try:
+        from flask import request
+
+        data = request.get_json()
+        interface_name = data.get("interface")
+
+        if interface_name == "all":
+            interface_name = None  # Capture on all interfaces
+
+        log(f"Switching to interface: {interface_name or 'all interfaces'}")
+        start_capture_on_interface(interface_name)
+
+        return jsonify(
+            {
+                "success": True,
+                "message": f'Switched to {interface_name or "all interfaces"}',
+                "selected_interface": interface_name,
+            }
+        )
+
+    except Exception as e:
+        log(f"Error selecting interface: {e}", "error")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route("/test_interface/<interface_name>")
+def test_interface(interface_name):
+    """Test packet capture on specific interface"""
+    if interface_name == "default":
+        interface_name = None
+
+    success, packet_count = test_packet_capture(interface_name)
+
+    return jsonify(
+        {
+            "success": success,
+            "packets_captured": packet_count,
+            "interface": interface_name or "default",
+            "message": (
+                f"Captured {packet_count} packets in test" if success else "Test failed"
+            ),
+        }
+    )
+
+
+@app.route("/windows_firewall_fix")
+def windows_firewall_fix():
+    """Attempt to fix Windows firewall issues"""
+    if platform.system() != "Windows":
+        return jsonify({"success": False, "error": "Not a Windows system"})
+
+    try:
+        success = create_windows_firewall_rule()
+        if success:
+            return jsonify(
+                {
+                    "success": True,
+                    "message": "Windows firewall rules created. Try packet capture again.",
+                }
+            )
+        else:
+            return jsonify(
+                {
+                    "success": False,
+                    "error": "Failed to create firewall rules. Run as Administrator.",
+                }
+            )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)})
 
 
 @app.route("/data")
