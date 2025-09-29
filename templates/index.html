@@ -4,32 +4,160 @@
 <head>
   <meta charset="UTF-8" />
   <title>Enhanced Packet Sniffer Dashboard</title>
-
   <!-- TailwindCSS -->
   <script src="https://cdn.tailwindcss.com"></script>
-
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-
   <!-- Leaflet -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
   <!-- D3.js for network topology -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
-
   <style>
     body {
-      background-color: #0f172a;
+      background: radial-gradient(circle at 18% 24%, #1e293b 0%, #0f172a 55%, #0b1120 100%);
       color: #e6eef8;
+      min-height: 100vh;
+      background-attachment: fixed;
+      font-feature-settings: "ss01" on, "cv02" on;
     }
 
+    /* Fancy card (glass + gradient + animated glow) */
     .card {
-      background-color: #1e293b;
+      position: relative;
+      background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 60%, rgba(15, 23, 42, 0.85) 100%);
       border-radius: 1rem;
       padding: 1rem;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 4px 18px -6px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+      backdrop-filter: blur(10px) saturate(160%);
+      -webkit-backdrop-filter: blur(10px) saturate(160%);
+      overflow: hidden;
+      transition: transform .55s cubic-bezier(.19, 1, .22, 1), box-shadow .55s ease, border-color .4s ease;
+      isolation: isolate;
     }
+
+    .card:before,
+    .card:after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      transition: opacity .8s ease;
+      pointer-events: none;
+    }
+
+    .card:before {
+      background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.18), transparent 55%);
+      mix-blend-mode: overlay;
+    }
+
+    .card:after {
+      background: linear-gradient(120deg, rgba(96, 165, 250, 0.18), rgba(167, 139, 250, 0.14), rgba(52, 211, 153, 0.16));
+      mix-blend-mode: overlay;
+    }
+
+    .card:hover {
+      transform: translateY(-6px) scale(1.01);
+      box-shadow: 0 6px 28px -8px rgba(56, 189, 248, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.07) inset, 0 0 0 1px rgba(56, 189, 248, 0.35);
+      border-color: rgba(148, 163, 184, 0.25);
+    }
+
+    .card:hover:before,
+    .card:hover:after {
+      opacity: 1;
+    }
+
+    .card:active {
+      transform: translateY(-2px) scale(.995);
+    }
+
+    /* Digital counter subtle glow */
+    .digital-counter {
+      position: relative;
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 2px 8px -2px rgba(0, 0, 0, 0.7) inset;
+    }
+
+    /* Animated gradient title */
+    .gradient-title {
+      background: linear-gradient(90deg, #60a5fa, #34d399, #a78bfa, #60a5fa);
+      background-size: 200% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      animation: gradientShift 8s linear infinite;
+      letter-spacing: .5px;
+      filter: drop-shadow(0 2px 10px rgba(96, 165, 250, 0.25));
+    }
+
+    @keyframes gradientShift {
+      0% {
+        background-position: 0% 50%;
+      }
+
+      50% {
+        background-position: 100% 50%;
+      }
+
+      100% {
+        background-position: 0% 50%;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .gradient-title {
+        animation: none;
+        background-position: 0 0;
+      }
+    }
+
+    .digital-counter:after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
+      opacity: .35;
+      pointer-events: none;
+      border-radius: inherit;
+    }
+
+    /* Animated capture pulse */
+    @keyframes pulseRing {
+      0% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
+      }
+
+      65% {
+        box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
+      }
+
+      100% {
+        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
+      }
+    }
+
+    #captureStatus.capturing {
+      animation: pulseRing 2s infinite;
+    }
+
+    /* Subtle shimmer for loading states */
+    @keyframes shimmer {
+      0% {
+        background-position: -450px 0;
+      }
+
+      100% {
+        background-position: 450px 0;
+      }
+    }
+
+    .shimmer {
+      background: linear-gradient(100deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.12) 40%, rgba(255, 255, 255, 0.04) 80%);
+      background-size: 800px 100%;
+      animation: shimmer 3.2s infinite;
+    }
+
+    /* Scrollbar refinement (legacy block kept + enhancements below) */
 
     .small {
       font-size: 0.85rem;
@@ -128,14 +256,184 @@
       border-left-color: #4ade80;
       background-color: rgba(74, 222, 128, 0.1);
     }
+
+    /* Fancy hover for list items */
+    #trafficFlows .flow-item,
+    #packetDetails .packet-item {
+      transition: background .4s ease, transform .4s ease;
+    }
+
+    #trafficFlows .flow-item:hover {
+      background: rgba(96, 165, 250, 0.18);
+      transform: translateX(4px);
+    }
+
+    #packetDetails .packet-item:hover {
+      background: rgba(167, 139, 250, 0.2);
+    }
+
+    /* Map container subtle border */
+    #map {
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 4px 14px -4px rgba(0, 0, 0, 0.7);
+    }
+
+    /* Topology container effect */
+    #networkTopology {
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+    }
+
+    .network-node {
+      transition: fill .4s ease, filter .4s ease;
+    }
+
+    .network-node:hover {
+      filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.7));
+    }
+
+    .network-link {
+      stroke: linear-gradient(90deg, #475569, #1e293b);
+    }
+
+    /* Smooth fade-in */
+    .fade-in {
+      animation: fadeIn .8s ease forwards;
+      opacity: 0;
+    }
+
+    @keyframes fadeIn {
+      to {
+        opacity: 1;
+        transform: none;
+      }
+
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+    }
+
+    /* Buttons refinement */
+    button {
+      position: relative;
+      overflow: hidden;
+    }
+
+    button:before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+      opacity: 0;
+      transition: opacity .45s;
+      mix-blend-mode: overlay;
+    }
+
+    button:hover:before {
+      opacity: 1;
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    /* Direction icons */
+    .icon-badge {
+      width: 28px;
+      height: 28px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 6px;
+      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+      box-shadow: 0 2px 4px -2px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+      position: relative;
+    }
+
+    .icon-badge.sent {
+      background: linear-gradient(135deg, #f59e0b22, #f59e0b11);
+      color: #fbbf24;
+    }
+
+    .icon-badge.recv {
+      background: linear-gradient(135deg, #05966922, #05966911);
+      color: #34d399;
+    }
+
+    .direction-icon {
+      width: 18px;
+      height: 18px;
+      display: block;
+    }
+
+    .direction-icon path {
+      stroke-width: 1.5;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .icon-badge.sent:hover {
+      box-shadow: 0 0 0 1px #f59e0b66, 0 4px 10px -4px #f59e0b66;
+    }
+
+    .icon-badge.recv:hover {
+      box-shadow: 0 0 0 1px #10b98166, 0 4px 10px -4px #10b98166;
+    }
+
+    /* Animated stat numbers */
+    .stat-number {
+      font-size: 1.15rem;
+      line-height: 1;
+      background: linear-gradient(90deg, #e2e8f0, #60a5fa, #34d399);
+      background-size: 180% auto;
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      position: relative;
+      font-variant-numeric: tabular-nums;
+      transition: filter .4s ease;
+    }
+
+    .stat-number.bump {
+      animation: statBump .55s cubic-bezier(.22, 1.2, .32, 1);
+    }
+
+    @keyframes statBump {
+      0% {
+        transform: scale(1);
+        filter: brightness(1);
+      }
+
+      35% {
+        transform: scale(1.3) translateY(-2px);
+        filter: brightness(1.4);
+      }
+
+      60% {
+        transform: scale(.94);
+      }
+
+      100% {
+        transform: scale(1);
+        filter: brightness(1);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .stat-number {
+        animation: none !important;
+        transition: none;
+      }
+    }
   </style>
 </head>
 
-<body class="p-6">
+<body class="p-6" style="background:radial-gradient(circle at 20% 25%,#1e293b 0%,#0f172a 55%,#050a16 100%);">
   <div class="max-w-7xl mx-auto flex flex-col space-y-6">
     <!-- Header -->
     <header class="flex flex-col md:flex-row justify-between items-start md:items-center">
-      <h1 class="text-2xl md:text-3xl font-bold mb-2 md:mb-0">
+      <h1 class="text-2xl md:text-3xl font-bold mb-2 md:mb-0 gradient-title">
         🔍 Enhanced Network Monitor
       </h1>
       <div class="flex items-center space-x-4">
@@ -211,9 +509,25 @@
           <span class="badge bg-green-600">Direction</span>
         </div>
         <div class="mt-2">
-          <div class="flex justify-between text-sm">
-            <span>📤 Sent: <span id="packetsSent" class="font-mono">0</span></span>
-            <span>📥 Received: <span id="packetsReceived" class="font-mono">0</span></span>
+          <div class="flex justify-between text-base md:text-lg">
+            <span class="flex items-center gap-2">
+              <span class="icon-badge sent" title="Sent packets" aria-label="Sent packets">
+                <svg viewBox="0 0 24 24" class="direction-icon" fill="none" stroke="currentColor">
+                  <path d="M4 20L20 4M9 4h11v11" stroke="currentColor" />
+                </svg>
+              </span>
+              <span class="opacity-75 text-xs md:text-sm">Sent:</span> <span id="packetsSent"
+                class="font-mono stat-number" data-current="0">0</span>
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="icon-badge recv" title="Received packets" aria-label="Received packets">
+                <svg viewBox="0 0 24 24" class="direction-icon" fill="none" stroke="currentColor">
+                  <path d="M20 4L4 20M15 20H4V9" stroke="currentColor" />
+                </svg>
+              </span>
+              <span class="opacity-75 text-xs md:text-sm">Received:</span> <span id="packetsReceived"
+                class="font-mono stat-number" data-current="0">0</span>
+            </span>
           </div>
         </div>
       </div>
@@ -396,7 +710,7 @@
         if (data.status === 'success') {
           currentInterface = ifaceName;
           document.getElementById('currentInterface').innerText = ifaceName;
-          document.getElementById('captureStatus').className = 'w-3 h-3 bg-green-500 rounded-full';
+          document.getElementById('captureStatus').className = 'w-3 h-3 bg-green-500 rounded-full capturing';
           document.getElementById('captureStatusText').innerText = 'Running';
           hideInterfaceModal();
           // Reset charts and data on new interface selection
@@ -496,6 +810,11 @@
           el._mechInterval = null;
           el.innerText = formatNumber(target);
           el.dataset.current = String(target);
+          // bump animation at completion
+          el.classList.remove('bump');
+          void el.offsetWidth; // reflow to restart animation
+          el.classList.add('bump');
+          setTimeout(() => el.classList.remove('bump'), 650);
         }
       }, stepDelay);
     }
@@ -899,14 +1218,16 @@
         const pktDiv = document.createElement('div');
         pktDiv.className = `packet-item ${pkt.direction === 'sent' ? 'packet-sent' : 'packet-received'}`;
 
-        const dirIcon = pkt.direction === 'sent' ? '📤' : '📥';
+        const dirIcon = pkt.direction === 'sent'
+          ? `<span class=\"icon-badge sent\" title=\"Sent packet\"><svg viewBox=\"0 0 24 24\" class=\"direction-icon\" fill=\"none\" stroke=\"currentColor\"><path d=\"M4 20L20 4M9 4h11v11\" stroke=\"currentColor\"/></svg></span>`
+          : `<span class=\"icon-badge recv\" title=\"Received packet\"><svg viewBox=\"0 0 24 24\" class=\"direction-icon\" fill=\"none\" stroke=\"currentColor\"><path d=\"M20 4L4 20M15 20H4V9\" stroke=\"currentColor\"/></svg></span>`;
         const processInfo = pkt.process ? ` [${pkt.process}]` : '';
 
         pktDiv.innerHTML = `
             <div class="flex justify-between items-start">
               <div class="flex-1 min-w-0">
                 <div class="flex items-center space-x-1 text-xs">
-                  <span>${dirIcon}</span>
+                  ${dirIcon}
                   <span class="text-gray-300">${time}</span>
                   <span class="text-blue-300">${pkt.protocol}</span>
                   ${pkt.app_protocol !== 'Unknown' ? `<span class="text-purple-300">${pkt.app_protocol}</span>` : ''}
@@ -1023,8 +1344,8 @@
         document.getElementById("activeConnections").innerText = data.active_connections;
 
         // Update packet direction counters
-        document.getElementById("packetsSent").innerText = formatNumber(data.packet_directions?.sent || 0);
-        document.getElementById("packetsReceived").innerText = formatNumber(data.packet_directions?.received || 0);
+        mechanicalCounter(document.getElementById("packetsSent"), data.packet_directions?.sent || 0, 900, 20);
+        mechanicalCounter(document.getElementById("packetsReceived"), data.packet_directions?.received || 0, 900, 20);
 
         // Update existing charts
         if (protocolChart && data.protocols) {
