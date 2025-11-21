@@ -1,1456 +1,329 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
-  <title>Enhanced Packet Sniffer Dashboard</title>
-  <!-- TailwindCSS -->
+  <title>Real-Time Network Monitor</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <!-- Leaflet -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- D3.js for network topology -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+  
   <style>
-    body {
-      background: radial-gradient(circle at 18% 24%, #1e293b 0%, #0f172a 55%, #0b1120 100%);
-      color: #e6eef8;
-      min-height: 100vh;
-      background-attachment: fixed;
-      font-feature-settings: "ss01" on, "cv02" on;
-    }
-
-    /* Fancy card (glass + gradient + animated glow) */
-    .card {
-      position: relative;
-      background: linear-gradient(135deg, rgba(30, 41, 59, 0.85) 0%, rgba(15, 23, 42, 0.95) 60%, rgba(15, 23, 42, 0.85) 100%);
-      border-radius: 1rem;
-      padding: 1rem;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      box-shadow: 0 4px 18px -6px rgba(0, 0, 0, 0.75), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
-      backdrop-filter: blur(10px) saturate(160%);
-      -webkit-backdrop-filter: blur(10px) saturate(160%);
-      overflow: hidden;
-      transition: transform .55s cubic-bezier(.19, 1, .22, 1), box-shadow .55s ease, border-color .4s ease;
-      isolation: isolate;
-    }
-
-    .card:before,
-    .card:after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      opacity: 0;
-      transition: opacity .8s ease;
-      pointer-events: none;
-    }
-
-    .card:before {
-      background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.18), transparent 55%);
-      mix-blend-mode: overlay;
-    }
-
-    .card:after {
-      background: linear-gradient(120deg, rgba(96, 165, 250, 0.18), rgba(167, 139, 250, 0.14), rgba(52, 211, 153, 0.16));
-      mix-blend-mode: overlay;
-    }
-
-    .card:hover {
-      transform: translateY(-6px) scale(1.01);
-      box-shadow: 0 6px 28px -8px rgba(56, 189, 248, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.07) inset, 0 0 0 1px rgba(56, 189, 248, 0.35);
-      border-color: rgba(148, 163, 184, 0.25);
-    }
-
-    .card:hover:before,
-    .card:hover:after {
-      opacity: 1;
-    }
-
-    .card:active {
-      transform: translateY(-2px) scale(.995);
-    }
-
-    /* Digital counter subtle glow */
-    .digital-counter {
-      position: relative;
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04), 0 2px 8px -2px rgba(0, 0, 0, 0.7) inset;
-    }
-
-    /* Animated gradient title */
-    .gradient-title {
-      background: linear-gradient(90deg, #60a5fa, #34d399, #a78bfa, #60a5fa);
-      background-size: 200% auto;
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      animation: gradientShift 8s linear infinite;
-      letter-spacing: .5px;
-      filter: drop-shadow(0 2px 10px rgba(96, 165, 250, 0.25));
-    }
-
-    @keyframes gradientShift {
-      0% {
-        background-position: 0% 50%;
-      }
-
-      50% {
-        background-position: 100% 50%;
-      }
-
-      100% {
-        background-position: 0% 50%;
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .gradient-title {
-        animation: none;
-        background-position: 0 0;
-      }
-    }
-
-    .digital-counter:after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0));
-      opacity: .35;
-      pointer-events: none;
-      border-radius: inherit;
-    }
-
-    /* Animated capture pulse */
-    @keyframes pulseRing {
-      0% {
-        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.55);
-      }
-
-      65% {
-        box-shadow: 0 0 0 10px rgba(34, 197, 94, 0);
-      }
-
-      100% {
-        box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-      }
-    }
-
-    #captureStatus.capturing {
-      animation: pulseRing 2s infinite;
-    }
-
-    /* Subtle shimmer for loading states */
-    @keyframes shimmer {
-      0% {
-        background-position: -450px 0;
-      }
-
-      100% {
-        background-position: 450px 0;
-      }
-    }
-
-    .shimmer {
-      background: linear-gradient(100deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.12) 40%, rgba(255, 255, 255, 0.04) 80%);
-      background-size: 800px 100%;
-      animation: shimmer 3.2s infinite;
-    }
-
-    /* Scrollbar refinement (legacy block kept + enhancements below) */
-
-    .small {
-      font-size: 0.85rem;
-      color: #94a3b8;
-    }
-
-    .digital-counter {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono",
-        "Courier New", monospace;
-      letter-spacing: 0.02em;
-      background: linear-gradient(180deg,
-          rgba(255, 255, 255, 0.02),
-          rgba(0, 0, 0, 0.02));
-      padding: 0.25rem 0.5rem;
-      border-radius: 0.25rem;
-      display: inline-block;
-    }
-
-    .badge {
-      padding: 0.15rem 0.5rem;
-      border-radius: 0.25rem;
-      font-size: 0.7rem;
-      font-weight: 600;
-    }
-
-    .tooltip-custom {
-      background-color: #1e293b;
-      color: #e6eef8;
-      border-radius: 0.25rem;
-      padding: 0.2rem 0.5rem;
-      font-size: 0.75rem;
-    }
-
-    .custom-scroll::-webkit-scrollbar {
-      width: 8px;
-      background: #1e293b;
-      border-radius: 8px;
-    }
-
-    .custom-scroll::-webkit-scrollbar-thumb {
-      background: #334155;
-      border-radius: 8px;
-    }
-
-    .custom-scroll::-webkit-scrollbar-thumb:hover {
-      background: #475569;
-    }
-
-    .custom-scroll {
-      scrollbar-width: thin;
-      scrollbar-color: #334155 #1e293b;
-    }
-
-    .network-node {
-      cursor: pointer;
-      stroke-width: 2px;
-      stroke: #60a5fa;
-    }
-
-    .network-link {
-      stroke: #374151;
-      stroke-width: 1px;
-      opacity: 0.6;
-    }
-
-    .network-text {
-      font-size: 10px;
-      fill: #e6eef8;
-      text-anchor: middle;
-      pointer-events: none;
-    }
-
-    .flow-item {
-      background: rgba(96, 165, 250, 0.1);
-      border-left: 3px solid #60a5fa;
-      margin-bottom: 0.5rem;
-      padding: 0.5rem;
-      border-radius: 0.25rem;
-    }
-
-    .packet-item {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
-      font-size: 0.75rem;
-      padding: 0.25rem;
-      margin-bottom: 0.25rem;
-      border-radius: 0.25rem;
-      border-left: 2px solid #4ade80;
-    }
-
-    .packet-sent {
-      border-left-color: #f97316;
-      background-color: rgba(249, 115, 22, 0.1);
-    }
-
-    .packet-received {
-      border-left-color: #4ade80;
-      background-color: rgba(74, 222, 128, 0.1);
-    }
-
-    /* Fancy hover for list items */
-    #trafficFlows .flow-item,
-    #packetDetails .packet-item {
-      transition: background .4s ease, transform .4s ease;
-    }
-
-    #trafficFlows .flow-item:hover {
-      background: rgba(96, 165, 250, 0.18);
-      transform: translateX(4px);
-    }
-
-    #packetDetails .packet-item:hover {
-      background: rgba(167, 139, 250, 0.2);
-    }
-
-    /* Map container subtle border */
-    #map {
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset, 0 4px 14px -4px rgba(0, 0, 0, 0.7);
-    }
-
-    /* Topology container effect */
-    #networkTopology {
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
-    }
-
-    .network-node {
-      transition: fill .4s ease, filter .4s ease;
-    }
-
-    .network-node:hover {
-      filter: drop-shadow(0 0 6px rgba(96, 165, 250, 0.7));
-    }
-
-    .network-link {
-      stroke: linear-gradient(90deg, #475569, #1e293b);
-    }
-
-    /* Smooth fade-in */
-    .fade-in {
-      animation: fadeIn .8s ease forwards;
-      opacity: 0;
-    }
-
-    @keyframes fadeIn {
-      to {
-        opacity: 1;
-        transform: none;
-      }
-
-      from {
-        opacity: 0;
-        transform: translateY(6px);
-      }
-    }
-
-    /* Buttons refinement */
-    button {
-      position: relative;
-      overflow: hidden;
-    }
-
-    button:before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(120deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
-      opacity: 0;
-      transition: opacity .45s;
-      mix-blend-mode: overlay;
-    }
-
-    button:hover:before {
-      opacity: 1;
-    }
-
-    button:active {
-      transform: translateY(1px);
-    }
-
-    /* Direction icons */
-    .icon-badge {
-      width: 28px;
-      height: 28px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 6px;
-      background: linear-gradient(135deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
-      box-shadow: 0 2px 4px -2px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
-      position: relative;
-    }
-
-    .icon-badge.sent {
-      background: linear-gradient(135deg, #f59e0b22, #f59e0b11);
-      color: #fbbf24;
-    }
-
-    .icon-badge.recv {
-      background: linear-gradient(135deg, #05966922, #05966911);
-      color: #34d399;
-    }
-
-    .direction-icon {
-      width: 18px;
-      height: 18px;
-      display: block;
-    }
-
-    .direction-icon path {
-      stroke-width: 1.5;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
-
-    .icon-badge.sent:hover {
-      box-shadow: 0 0 0 1px #f59e0b66, 0 4px 10px -4px #f59e0b66;
-    }
-
-    .icon-badge.recv:hover {
-      box-shadow: 0 0 0 1px #10b98166, 0 4px 10px -4px #10b98166;
-    }
-
-    /* Animated stat numbers */
-    .stat-number {
-      font-size: 1.15rem;
-      line-height: 1;
-      background: linear-gradient(90deg, #e2e8f0, #60a5fa, #34d399);
-      background-size: 180% auto;
-      -webkit-background-clip: text;
-      background-clip: text;
-      color: transparent;
-      position: relative;
-      font-variant-numeric: tabular-nums;
-      transition: filter .4s ease;
-    }
-
-    .stat-number.bump {
-      animation: statBump .55s cubic-bezier(.22, 1.2, .32, 1);
-    }
-
-    @keyframes statBump {
-      0% {
-        transform: scale(1);
-        filter: brightness(1);
-      }
-
-      35% {
-        transform: scale(1.3) translateY(-2px);
-        filter: brightness(1.4);
-      }
-
-      60% {
-        transform: scale(.94);
-      }
-
-      100% {
-        transform: scale(1);
-        filter: brightness(1);
-      }
-    }
-
-    @media (prefers-reduced-motion: reduce) {
-      .stat-number {
-        animation: none !important;
-        transition: none;
-      }
-    }
+    /* Same polished CSS as before */
+    body { background: radial-gradient(circle at 18% 24%, #1e293b 0%, #0f172a 55%, #0b1120 100%); color: #e6eef8; min-height: 100vh; font-family: 'Inter', sans-serif; }
+    .card { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.08); border-radius: 1rem; padding: 1rem; transition: transform 0.2s; }
+    .card:hover { transform: translateY(-2px); border-color: rgba(96, 165, 250, 0.4); }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-track { background: #1e293b; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+    .stat-number { font-variant-numeric: tabular-nums; }
+    .blink { animation: blinker 1.5s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0; } }
   </style>
 </head>
 
-<body class="p-6" style="background:radial-gradient(circle at 20% 25%,#1e293b 0%,#0f172a 55%,#050a16 100%);">
-  <div class="max-w-7xl mx-auto flex flex-col space-y-6">
-    <!-- Header -->
-    <header class="flex flex-col md:flex-row justify-between items-start md:items-center">
-      <h1 class="text-2xl md:text-3xl font-bold mb-2 md:mb-0 gradient-title">
-        🔍 Enhanced Network Monitor
-      </h1>
-      <div class="flex items-center space-x-4">
-        <button id="interfaceBtn" class="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-sm font-medium">
+<body class="p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <header class="flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-teal-300">
+          ⚡ Network Monitor
+        </h1>
+        <div class="flex items-center gap-2 text-xs text-gray-400 mt-1">
+          <div id="wsStatus" class="w-2 h-2 rounded-full bg-red-500"></div>
+          <span id="wsStatusText">Disconnected</span>
+        </div>
+      </div>
+      <div class="flex gap-3">
+        <button onclick="showInterfaceModal()" class="bg-slate-700 hover:bg-slate-600 px-4 py-2 rounded text-sm border border-slate-600">
           Select Interface
         </button>
-        <div class="small text-gray-400">Real-time packet analysis</div>
+        <button onclick="stopCapture()" class="bg-red-900/50 hover:bg-red-900/80 text-red-200 px-4 py-2 rounded text-sm border border-red-800">
+          Stop
+        </button>
       </div>
     </header>
 
-    <!-- Interface Selection Modal -->
-    <div id="interfaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
-      <div class="flex items-center justify-center min-h-screen p-4">
-        <div class="bg-slate-800 rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
-          <h3 class="text-xl font-bold mb-4">Select Network Interface</h3>
-          <div id="interfaceList" class="space-y-2 mb-4">
-            <!-- Interface list will be populated here -->
-          </div>
-          <div class="flex justify-between">
-            <button id="windowsFixBtn" class="bg-yellow-600 hover:bg-yellow-700 px-4 py-2 rounded text-sm hidden">
-              Fix Windows Firewall
-            </button>
-            <div class="flex space-x-2">
-              <button id="testAllBtn" class="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-sm">
-                Test All
-              </button>
-              <button id="closeModalBtn" class="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-sm">
-                Close
-              </button>
-            </div>
-          </div>
+    <div id="interfaceModal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center backdrop-blur-sm">
+      <div class="bg-slate-900 border border-slate-700 p-6 rounded-xl max-w-md w-full shadow-2xl">
+        <h3 class="text-xl font-bold mb-4">Select Interface</h3>
+        <div id="interfaceList" class="space-y-2 mb-4 max-h-60 overflow-y-auto custom-scroll">Loading...</div>
+        <button onclick="document.getElementById('interfaceModal').classList.add('hidden')" class="w-full bg-slate-700 py-2 rounded">Cancel</button>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div class="card">
+        <div class="text-gray-400 text-xs uppercase tracking-wider">Total Packets</div>
+        <div id="totalPackets" class="text-2xl font-bold mt-1 stat-number">0</div>
+      </div>
+      <div class="card">
+        <div class="text-gray-400 text-xs uppercase tracking-wider">Sent</div>
+        <div id="pktsSent" class="text-2xl font-bold mt-1 stat-number text-orange-400">0</div>
+      </div>
+      <div class="card">
+        <div class="text-gray-400 text-xs uppercase tracking-wider">Received</div>
+        <div id="pktsRecv" class="text-2xl font-bold mt-1 stat-number text-emerald-400">0</div>
+      </div>
+      <div class="card relative overflow-hidden">
+        <div class="text-gray-400 text-xs uppercase tracking-wider">Live Bandwidth</div>
+        <div class="absolute bottom-0 left-0 right-0 h-12 opacity-50">
+           <canvas id="sparklineChart"></canvas>
         </div>
       </div>
     </div>
 
-    <!-- Status and Alerts Bar -->
-    <div class="bg-slate-800 rounded-lg p-4 mb-4">
-      <div class="flex flex-wrap items-center justify-between gap-4">
-        <div class="flex items-center space-x-6">
-          <div class="flex items-center space-x-2">
-            <div id="captureStatus" class="w-3 h-3 bg-gray-500 rounded-full"></div>
-            <span class="text-sm">Capture: <span id="captureStatusText">Unknown</span></span>
-          </div>
-          <div class="text-sm">
-            Interface: <span id="currentInterface" class="font-mono bg-slate-700 px-2 py-1 rounded">None</span>
-          </div>
-          <div class="text-sm">
-            Packets: <span id="captureCount" class="font-mono">0</span>
-          </div>
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <div class="card lg:col-span-2">
+        <h3 class="text-sm text-gray-400 mb-4">Traffic Volume (Bytes/sec)</h3>
+        <div class="h-64">
+          <canvas id="bandwidthChart"></canvas>
         </div>
-        <div class="text-xs text-gray-400" id="lastUpdate">
-          Last update: Never
+      </div>
+      <div class="card">
+        <h3 class="text-sm text-gray-400 mb-4">Top Protocols</h3>
+        <div class="h-48 flex justify-center">
+          <canvas id="protocolChart"></canvas>
+        </div>
+        <div class="mt-4 border-t border-gray-700 pt-4">
+            <h3 class="text-sm text-gray-400 mb-2">Top Ports</h3>
+            <ul id="topPortsList" class="text-xs space-y-1 text-gray-300"></ul>
         </div>
       </div>
     </div>
 
-    <!-- Enhanced Stats Cards -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      <div class="card">
-        <div class="flex justify-between items-center">
-          <div class="small">📦 Total Packets</div>
-          <span class="badge bg-blue-600">Live</span>
-        </div>
-        <div id="totalPackets" class="text-3xl font-semibold mt-2">0</div>
-        <div class="small mt-2">
-          🔗 Connections: <span id="activeConnections">0</span>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="flex justify-between items-center">
-          <div class="small">📊 Packet Flow</div>
-          <span class="badge bg-green-600">Direction</span>
-        </div>
-        <div class="mt-2">
-          <div class="flex justify-between text-base md:text-lg">
-            <span class="flex items-center gap-2">
-              <span class="icon-badge sent" title="Sent packets" aria-label="Sent packets">
-                <svg viewBox="0 0 24 24" class="direction-icon" fill="none" stroke="currentColor">
-                  <path d="M4 20L20 4M9 4h11v11" stroke="currentColor" />
-                </svg>
-              </span>
-              <span class="opacity-75 text-xs md:text-sm">Sent:</span> <span id="packetsSent"
-                class="font-mono stat-number" data-current="0">0</span>
-            </span>
-            <span class="flex items-center gap-2">
-              <span class="icon-badge recv" title="Received packets" aria-label="Received packets">
-                <svg viewBox="0 0 24 24" class="direction-icon" fill="none" stroke="currentColor">
-                  <path d="M20 4L4 20M15 20H4V9" stroke="currentColor" />
-                </svg>
-              </span>
-              <span class="opacity-75 text-xs md:text-sm">Received:</span> <span id="packetsReceived"
-                class="font-mono stat-number" data-current="0">0</span>
-            </span>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="flex justify-between items-center">
-          <div class="small">⚡ Bandwidth</div>
-          <span class="badge bg-purple-600">Real-time</span>
-        </div>
-        <div class="w-full h-20">
-          <canvas id="bandwidthChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="flex justify-between items-center">
-          <div class="small">🚨 Alerts</div>
-          <span class="badge bg-red-600">Critical</span>
-        </div>
-        <ul id="alertsList" class="mt-2 text-xs overflow-y-auto max-h-20 custom-scroll"></ul>
-      </div>
-    </div>
-
-    <!-- Application and Protocol Analysis -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      <div class="card">
-        <div class="small mb-2">🌐 Application Protocols</div>
-        <div class="w-full h-48">
-          <canvas id="appProtocolChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="small mb-2">📱 App Bandwidth Usage</div>
-        <div class="w-full h-48">
-          <canvas id="appBandwidthChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="small mb-2">🔌 Network Protocols</div>
-        <div class="w-full h-48">
-          <canvas id="protocolChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Traffic Flow and Topology -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="card">
-        <div class="small mb-2">🔄 Traffic Flows (Top Connections)</div>
-        <div id="trafficFlows" class="h-64 overflow-y-auto custom-scroll"></div>
+      <div class="card p-0 overflow-hidden h-80 relative">
+         <div id="map" class="w-full h-full z-0"></div>
+         <div class="absolute top-2 right-2 z-10 bg-slate-900/80 p-2 rounded text-xs backdrop-blur">
+            Active Sources
+         </div>
       </div>
-
       <div class="card">
-        <div class="small mb-2">🕸️ Network Topology</div>
-        <div id="networkTopology" class="h-64 bg-slate-900 rounded border relative overflow-hidden">
-          <div id="topologyEmpty" class="absolute inset-0 flex items-center justify-center text-sm text-gray-400">
-            Building network map...
-          </div>
-        </div>
+        <h3 class="text-sm text-gray-400 mb-2">Live Traffic Flows</h3>
+        <div id="flowList" class="h-72 overflow-y-auto custom-scroll text-xs font-mono space-y-1"></div>
       </div>
     </div>
 
-    <!-- Detailed Analysis -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <div class="card">
-        <div class="small mb-2">🎯 Top Active IPs</div>
-        <div class="w-full h-56">
-          <canvas id="ipChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="small mb-2">🔌 Port Activity</div>
-        <div class="w-full h-56">
-          <canvas id="portChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <!-- Packet Details and Geographic Map -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="card">
-        <div class="small mb-2">🌍 Geographic Distribution</div>
-        <div id="map" class="relative h-80 rounded-lg">
-          <div id="mapEmpty"
-            class="absolute inset-0 flex items-center justify-center text-sm text-gray-300 bg-black/30 rounded-lg pointer-events-none"
-            style="display: none">
-            No geographic data available
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="small mb-2">📋 Live Packet Stream</div>
-        <div id="packetDetails" class="h-80 overflow-y-auto custom-scroll text-xs"></div>
-      </div>
-    </div>
-
-    <!-- Packet Size and Logs -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="card">
-        <div class="small mb-2">📏 Packet Size Distribution</div>
-        <div class="w-full h-48">
-          <canvas id="sizeChart" class="w-full h-full"></canvas>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="small mb-2">📜 System Logs</div>
-        <ul id="logsList" class="text-xs h-48 overflow-auto custom-scroll"></ul>
+    <div class="card">
+      <h3 class="text-sm text-gray-400 mb-2 flex justify-between">
+        <span>Live Packet Stream</span>
+        <span class="text-blue-400 animate-pulse">● Live</span>
+      </h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="text-gray-500 border-b border-gray-700">
+            <tr>
+              <th class="pb-2">Time</th>
+              <th class="pb-2">Source</th>
+              <th class="pb-2">Dest</th>
+              <th class="pb-2">Proto</th>
+              <th class="pb-2">Size</th>
+              <th class="pb-2">Process</th>
+            </tr>
+          </thead>
+          <tbody id="packetTableBody" class="font-mono text-gray-300"></tbody>
+        </table>
       </div>
     </div>
   </div>
 
   <script>
-    // Interface Management
-    let availableInterfaces = [];
-    let currentInterface = null;
-    let isWindows = false;
+    // --- 1. Socket & State ---
+    const socket = io();
+    let charts = {};
+    let map, markers = [];
+    let isCapturing = false;
 
-    // Modal management
-    function showInterfaceModal() {
-      document.getElementById('interfaceModal').classList.remove('hidden');
-      loadInterfaces();
-    }
+    // --- 2. Socket Events ---
+    socket.on('connect', () => {
+      document.getElementById('wsStatus').className = 'w-2 h-2 rounded-full bg-green-500';
+      document.getElementById('wsStatusText').innerText = 'Connected';
+      console.log("WebSocket Connected");
+    });
 
-    function hideInterfaceModal() {
-      document.getElementById('interfaceModal').classList.add('hidden');
-    }
+    socket.on('disconnect', () => {
+      document.getElementById('wsStatus').className = 'w-2 h-2 rounded-full bg-red-500';
+      document.getElementById('wsStatusText').innerText = 'Disconnected';
+    });
 
-    // Load interfaces from backend
-    async function loadInterfaces() {
-      const listDiv = document.getElementById('interfaceList');
-      listDiv.innerHTML = '<div class="text-gray-400">Loading interfaces...</div>';
-      try {
-        const response = await fetch('/interfaces');
-        const data = await response.json();
-        availableInterfaces = data.interfaces;
-        isWindows = data.is_windows;
+    // THE MAIN EVENT LOOP
+    socket.on('stats_update', (data) => {
+      if (!data) return;
 
-        document.getElementById('windowsFixBtn').classList.toggle('hidden', !isWindows);
+      // KPIs
+      document.getElementById('totalPackets').innerText = data.total_packets.toLocaleString();
+      document.getElementById('pktsSent').innerText = data.packet_directions.sent.toLocaleString();
+      document.getElementById('pktsRecv').innerText = data.packet_directions.received.toLocaleString();
 
-        listDiv.innerHTML = '';
-        if (availableInterfaces.length === 0) {
-          listDiv.innerHTML = '<div class="text-red-400">No interfaces found. Make sure the backend is running with correct permissions.</div>';
-          return;
-        }
+      // Update Charts
+      updateCharts(data);
 
-        availableInterfaces.forEach(iface => {
-          const ifaceDiv = document.createElement('div');
-          ifaceDiv.className = 'p-3 bg-slate-700 rounded-lg flex justify-between items-center cursor-pointer hover:bg-slate-600';
-          ifaceDiv.dataset.name = iface.name;
-          ifaceDiv.innerHTML = `
-              <div>
-                <div class="font-bold">${iface.name}</div>
-                <div class="text-sm text-gray-400">${iface.description} (${iface.ip || 'No IP'})</div>
-              </div>
-              <div class="text-sm" id="test-status-${iface.name.replace(/\\/g, '-')}"></div>
-            `;
-          ifaceDiv.onclick = () => selectInterface(iface.name);
-          listDiv.appendChild(ifaceDiv);
+      // Update Map
+      updateMap(data.geo_points);
+
+      // Update Lists
+      updateFlowList(data.traffic_flows);
+      updatePacketTable(data.detailed_packets);
+      updatePorts(data.top_ports);
+    });
+
+    // --- 3. API Calls ---
+    async function showInterfaceModal() {
+        const modal = document.getElementById('interfaceModal');
+        const list = document.getElementById('interfaceList');
+        modal.classList.remove('hidden');
+        list.innerHTML = 'Loading interfaces...';
+        
+        const res = await fetch('/api/interfaces');
+        const data = await res.json();
+        
+        list.innerHTML = '';
+        data.interfaces.forEach(iface => {
+            const div = document.createElement('div');
+            div.className = "p-2 bg-slate-800 hover:bg-slate-700 rounded cursor-pointer border border-slate-700 transition";
+            div.innerText = iface;
+            div.onclick = () => startCapture(iface);
+            list.appendChild(div);
         });
-      } catch (e) {
-        listDiv.innerHTML = `<div class="text-red-400">Error loading interfaces: ${e.message}</div>`;
-        console.error("Failed to load interfaces:", e);
-      }
     }
 
-    // Select an interface
-    async function selectInterface(ifaceName) {
-      try {
-        const response = await fetch('/select_interface', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ interface: ifaceName }),
+    async function startCapture(iface) {
+        document.getElementById('interfaceModal').classList.add('hidden');
+        const res = await fetch('/api/start', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({interface: iface})
         });
-        const data = await response.json();
-        if (data.status === 'success') {
-          currentInterface = ifaceName;
-          document.getElementById('currentInterface').innerText = ifaceName;
-          document.getElementById('captureStatus').className = 'w-3 h-3 bg-green-500 rounded-full capturing';
-          document.getElementById('captureStatusText').innerText = 'Running';
-          hideInterfaceModal();
-          // Reset charts and data on new interface selection
-          createCharts();
-          fetchData();
+        const data = await res.json();
+        console.log("Capture started:", data);
+        isCapturing = true;
+    }
+
+    async function stopCapture() {
+        await fetch('/api/stop', {method: 'POST'});
+        isCapturing = false;
+    }
+
+    // --- 4. Visualization Logic ---
+
+    function updateCharts(data) {
+        // Bandwidth Chart
+        const bwData = data.bandwidth || [];
+        const labels = bwData.map((_, i) => i);
+        
+        if(!charts.bandwidth) {
+            const ctx = document.getElementById('bandwidthChart').getContext('2d');
+            charts.bandwidth = new Chart(ctx, {
+                type: 'line',
+                data: { labels: labels, datasets: [{ label: 'Bytes', data: bwData, borderColor: '#60a5fa', tension: 0.4, fill: true, backgroundColor: 'rgba(96, 165, 250, 0.1)' }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display: false} }, scales: { x: {display: false}, y: { grid: {color: '#334155'} } } }
+            });
         } else {
-          alert(`Failed to select interface: ${data.message}`);
+            charts.bandwidth.data.labels = labels;
+            charts.bandwidth.data.datasets[0].data = bwData;
+            charts.bandwidth.update('none'); // 'none' mode for performance
         }
-      } catch (e) {
-        alert(`Error selecting interface: ${e.message}`);
-      }
-    }
 
-    // Test all interfaces (placeholder)
-    async function testAllInterfaces() {
-      for (const iface of availableInterfaces) {
-        const statusEl = document.getElementById(`test-status-${iface.name.replace(/\\/g, '-')}`);
-        if (statusEl) {
-          statusEl.innerText = 'Testing...';
-          // This is a placeholder. A real implementation would
-          // involve a backend endpoint to test each interface.
-          setTimeout(() => {
-            const success = Math.random() > 0.3; // Simulate success/failure
-            statusEl.innerText = success ? '✅ OK' : '❌ Fail';
-            statusEl.className = success ? 'text-green-400' : 'text-red-400';
-          }, 1000 + Math.random() * 1000);
+        // Sparkline
+        if(!charts.spark) {
+             charts.spark = new Chart(document.getElementById('sparklineChart'), {
+                type: 'line',
+                data: { labels: labels, datasets: [{ data: bwData, borderColor: '#a78bfa', borderWidth: 1, pointRadius: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {display: false} }, scales: { x: {display: false}, y: {display: false} } }
+             });
+        } else {
+            charts.spark.data.labels = labels;
+            charts.spark.data.datasets[0].data = bwData;
+            charts.spark.update('none');
         }
-      }
-    }
 
-    // Windows Firewall Fix (placeholder)
-    function fixWindowsFirewall() {
-      alert("This is a placeholder. On Windows, you might need to run a command like:\n\nCheckNetIsolation.exe LoopbackExempt -a -n=\"<Your-App-ID>\"\n\nThis requires administrative privileges.");
-    }
-
-    // Chart variables
-    let protocolChart, ipChart, portChart, sizeChart, bandwidthChart;
-    let appProtocolChart, appBandwidthChart;
-    let _bandwidthInitialized = false;
-    let networkSimulation;
-
-    // Color palettes
-    const colorPalette = [
-      "#60a5fa", "#34d399", "#f97316", "#ef4444", "#a78bfa",
-      "#f59e0b", "#06b6d4", "#fb7185", "#10b981", "#8b5cf6"
-    ];
-
-    // Format number with commas
-    function formatNumber(n) {
-      return n.toLocaleString();
-    }
-
-    // Format bytes
-    function formatBytes(bytes) {
-      if (bytes === 0) return '0 B';
-      const k = 1024;
-      const sizes = ['B', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
-      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-    }
-
-    // Mechanical counter animation
-    function mechanicalCounter(el, target, duration = 1400, fps = 12) {
-      if (!el) return;
-      const startVal = parseInt(
-        el.dataset.current || el.innerText.replace(/[^0-9]/g, "") || "0",
-        10
-      );
-      target = parseInt(target || 0, 10);
-      if (isNaN(startVal) || isNaN(target) || startVal === target) {
-        el.innerText = formatNumber(target);
-        el.dataset.current = String(target);
-        return;
-      }
-
-      if (el._mechInterval) {
-        clearInterval(el._mechInterval);
-        el._mechInterval = null;
-      }
-
-      const steps = Math.max(3, Math.round((duration / 1000) * fps));
-      const stepDelay = Math.round(duration / steps);
-      const diff = target - startVal;
-      let step = 0;
-
-      el._mechInterval = setInterval(() => {
-        step++;
-        const t = step / steps;
-        const eased = Math.pow(t, 1.12);
-        const val = Math.round(startVal + diff * eased);
-        el.innerText = formatNumber(val);
-        el.dataset.current = String(val);
-        el.classList.add("opacity-95");
-        setTimeout(() => el.classList.remove("opacity-95"), 80);
-        if (step >= steps) {
-          clearInterval(el._mechInterval);
-          el._mechInterval = null;
-          el.innerText = formatNumber(target);
-          el.dataset.current = String(target);
-          // bump animation at completion
-          el.classList.remove('bump');
-          void el.offsetWidth; // reflow to restart animation
-          el.classList.add('bump');
-          setTimeout(() => el.classList.remove('bump'), 650);
+        // Protocol Doughnut
+        const pLabels = Object.keys(data.protocols);
+        const pData = Object.values(data.protocols);
+        if(!charts.proto) {
+            charts.proto = new Chart(document.getElementById('protocolChart'), {
+                type: 'doughnut',
+                data: { labels: pLabels, datasets: [{ data: pData, backgroundColor: ['#60a5fa', '#34d399', '#f87171', '#fbbf24'], borderWidth: 0 }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: {position: 'right', labels: {color: '#94a3b8', font:{size: 10}}} } }
+            });
+        } else {
+            charts.proto.data.labels = pLabels;
+            charts.proto.data.datasets[0].data = pData;
+            charts.proto.update();
         }
-      }, stepDelay);
     }
 
-    // Create/Update Charts
-    function createCharts(data) {
-      // Destroy existing charts
-      [protocolChart, ipChart, portChart, sizeChart, bandwidthChart,
-        appProtocolChart, appBandwidthChart].forEach(chart => {
-          if (chart) {
-            try { chart.destroy(); } catch (e) { }
-          }
-        });
-
-      // Application Protocol Chart
-      const appProtoLabels = data && data.app_protocols ? Object.keys(data.app_protocols) : [];
-      const appProtoData = data && data.app_protocols ? Object.values(data.app_protocols) : [];
-      appProtocolChart = new Chart(document.getElementById("appProtocolChart"), {
-        type: "doughnut",
-        data: {
-          labels: appProtoLabels,
-          datasets: [{
-            data: appProtoData,
-            backgroundColor: colorPalette.slice(0, appProtoLabels.length),
-            borderColor: colorPalette.slice(0, appProtoLabels.length).map(() => "#0f172a"),
-            borderWidth: 1,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-            },
-          },
-        },
-      });
-
-      // Application Bandwidth Chart
-      const appBwData = data && data.app_bandwidth ? data.app_bandwidth : {};
-      const appNames = Object.keys(appBwData).slice(0, 8);
-      const appBwValues = appNames.map(name => appBwData[name].total);
-
-      appBandwidthChart = new Chart(document.getElementById("appBandwidthChart"), {
-        type: "bar",
-        data: {
-          labels: appNames.map(name => name.length > 15 ? name.substring(0, 12) + '...' : name),
-          datasets: [{
-            label: "Total Bytes",
-            data: appBwValues,
-            backgroundColor: colorPalette[2],
-            borderColor: colorPalette[2],
-            borderWidth: 1
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          indexAxis: 'y',
-          plugins: {
-            legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-              callbacks: {
-                label: (context) => `${context.dataset.label}: ${formatBytes(context.raw)}`
-              }
-            },
-          },
-          scales: {
-            x: { ticks: { color: "#e6eef8", font: { size: 9 } } },
-            y: { ticks: { color: "#e6eef8", font: { size: 9 } } },
-          },
-        },
-      });
-
-      // Network Protocol Chart
-      const protoLabels = data && data.protocols ? Object.keys(data.protocols) : [];
-      const protoData = data && data.protocols ? Object.values(data.protocols) : [];
-      protocolChart = new Chart(document.getElementById("protocolChart"), {
-        type: "doughnut",
-        data: {
-          labels: protoLabels,
-          datasets: [{
-            data: protoData,
-            backgroundColor: colorPalette.slice(0, protoLabels.length),
-            borderColor: colorPalette.slice(0, protoLabels.length).map(() => "#0f172a"),
-            borderWidth: 1,
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: "#e6eef8", font: { size: 10 } } },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-            },
-          },
-        },
-      });
-
-      // IP Chart
-      const ipLabels = data && data.top_ips ? data.top_ips.map(x => x[0] + " (" + x[1] + ")") : [];
-      const ipData = data && data.top_ips ? data.top_ips.map(x => x[1]) : [];
-      ipChart = new Chart(document.getElementById("ipChart"), {
-        type: "bar",
-        data: {
-          labels: ipLabels,
-          datasets: [{
-            label: "Packets",
-            data: ipData,
-            backgroundColor: colorPalette[0],
-            borderColor: colorPalette[0]
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          indexAxis: "y",
-          plugins: {
-            legend: { labels: { color: "#e6eef8" } },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-            },
-          },
-          scales: {
-            x: { ticks: { color: "#e6eef8" } },
-            y: { ticks: { color: "#e6eef8", font: { size: 9 } } },
-          },
-        },
-      });
-
-      // Port Chart
-      const portLabels = data && data.top_ports ? data.top_ports.map(x => x[0]) : [];
-      const portData = data && data.top_ports ? data.top_ports.map(x => x[1]) : [];
-      portChart = new Chart(document.getElementById("portChart"), {
-        type: "bar",
-        data: {
-          labels: portLabels,
-          datasets: [{
-            label: "Hits",
-            data: portData,
-            backgroundColor: colorPalette[1],
-            borderColor: colorPalette[1]
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: "#e6eef8" } },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-            },
-          },
-          scales: {
-            x: { ticks: { color: "#e6eef8" } },
-            y: { ticks: { color: "#e6eef8" }, beginAtZero: true },
-          },
-        },
-      });
-
-      // Size Chart
-      const sizeLabels = data && data.packet_sizes ? data.packet_sizes.map(x => x[0]) : [];
-      const sizeData = data && data.packet_sizes ? data.packet_sizes.map(x => x[1]) : [];
-      sizeChart = new Chart(document.getElementById("sizeChart"), {
-        type: "bar",
-        data: {
-          labels: sizeLabels,
-          datasets: [{
-            label: "Count",
-            data: sizeData,
-            backgroundColor: colorPalette[3],
-            borderColor: colorPalette[3]
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { labels: { color: "#e6eef8" } },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-            },
-          },
-          scales: {
-            x: { ticks: { color: "#e6eef8" } },
-            y: { ticks: { color: "#e6eef8" }, beginAtZero: true },
-          },
-        },
-      });
-
-      // Bandwidth Chart
-      const bw = data && data.bandwidth ? data.bandwidth.slice() : [];
-      bandwidthChart = new Chart(document.getElementById("bandwidthChart"), {
-        type: "line",
-        data: {
-          labels: bw.map((_, i) => i - bw.length + "s"),
-          datasets: [{
-            label: "Bytes/sec",
-            data: bw,
-            fill: true,
-            tension: 0.25,
-            backgroundColor: "rgba(96,165,250,0.15)",
-            borderColor: "#60a5fa",
-          }],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          interaction: { intersect: false, mode: "index" },
-          elements: { point: { radius: 0 } },
-          plugins: {
-            legend: { display: false },
-            tooltip: {
-              backgroundColor: "#1e293b",
-              titleColor: "#e6eef8",
-              bodyColor: "#e6eef8",
-              callbacks: {
-                label: (context) => `${formatBytes(context.raw)}/sec`
-              }
-            },
-          },
-          scales: {
-            x: {
-              display: false,
-              grid: { color: "rgba(230,238,248,0.03)" },
-            },
-            y: {
-              display: false,
-              grid: { color: "rgba(230,238,248,0.03)" },
-            },
-          },
-        },
-      });
+    function updatePorts(ports) {
+        const list = document.getElementById('topPortsList');
+        list.innerHTML = ports.map(([port, count]) => 
+            `<li class="flex justify-between"><span>Port ${port}</span><span class="text-gray-500">${count}</span></li>`
+        ).join('');
     }
 
-    // Network Topology Visualization
-    function updateNetworkTopology(topologyData) {
-      const container = document.getElementById("networkTopology");
-      const emptyMsg = document.getElementById("topologyEmpty");
-
-      // Clear previous visualization
-      d3.select(container).select("svg").remove();
-
-      if (!topologyData || topologyData.length === 0) {
-        emptyMsg.style.display = "";
-        return;
-      }
-
-      emptyMsg.style.display = "none";
-
-      const width = container.clientWidth;
-      const height = container.clientHeight;
-
-      const svg = d3.select(container)
-        .append("svg")
-        .attr("width", width)
-        .attr("height", height);
-
-      // Extract nodes and links
-      const nodes = Array.from(new Set(
-        topologyData.flatMap(d => [d.source, d.target])
-      )).map(id => ({ id, group: id.startsWith("192.168.") ? 1 : 2 }));
-
-      const links = topologyData.map(d => ({ source: d.source, target: d.target }));
-
-      // Create force simulation
-      const simulation = d3.forceSimulation(nodes)
-        .force("link", d3.forceLink(links).id(d => d.id).distance(50))
-        .force("charge", d3.forceManyBody().strength(-100))
-        .force("center", d3.forceCenter(width / 2, height / 2))
-        .force("collision", d3.forceCollide().radius(15));
-
-      // Add links
-      const link = svg.append("g")
-        .selectAll("line")
-        .data(links)
-        .join("line")
-        .attr("class", "network-link");
-
-      // Add nodes
-      const node = svg.append("g")
-        .selectAll("circle")
-        .data(nodes)
-        .join("circle")
-        .attr("class", "network-node")
-        .attr("r", 8)
-        .attr("fill", d => d.group === 1 ? "#34d399" : "#60a5fa")
-        .call(d3.drag()
-          .on("start", dragstarted)
-          .on("drag", dragged)
-          .on("end", dragended));
-
-      // Add labels
-      const label = svg.append("g")
-        .selectAll("text")
-        .data(nodes)
-        .join("text")
-        .attr("class", "network-text")
-        .text(d => d.id.split('.').slice(-1)[0]) // Show only last octet
-        .attr("dy", -12);
-
-      // Tooltip
-      node.append("title")
-        .text(d => `IP: ${d.id}\nType: ${d.group === 1 ? 'Local' : 'External'}`);
-
-      simulation.on("tick", () => {
-        link
-          .attr("x1", d => d.source.x)
-          .attr("y1", d => d.source.y)
-          .attr("x2", d => d.target.x)
-          .attr("y2", d => d.target.y);
-
-        node
-          .attr("cx", d => d.x)
-          .attr("cy", d => d.y);
-
-        label
-          .attr("x", d => d.x)
-          .attr("y", d => d.y);
-      });
-
-      function dragstarted(event, d) {
-        if (!event.active) simulation.alphaTarget(0.3).restart();
-        d.fx = d.x;
-        d.fy = d.y;
-      }
-
-      function dragged(event, d) {
-        d.fx = event.x;
-        d.fy = event.y;
-      }
-
-      function dragended(event, d) {
-        if (!event.active) simulation.alphaTarget(0);
-        d.fx = null;
-        d.fy = null;
-      }
-
-      networkSimulation = simulation;
-    }
-
-    // Traffic Flows Display
-    function updateTrafficFlows(flows) {
-      const container = document.getElementById("trafficFlows");
-      container.innerHTML = "";
-
-      if (!flows || flows.length === 0) {
-        container.innerHTML = '<div class="text-gray-400 text-center py-4">No traffic flows detected</div>';
-        return;
-      }
-
-      flows.slice(0, 10).forEach(([flow, packets, bytes]) => {
-        const [src, dst] = flow.split(':');
-        const flowDiv = document.createElement('div');
-        flowDiv.className = 'flow-item';
-        flowDiv.innerHTML = `
-            <div class="flex justify-between items-center mb-1">
-              <div class="font-mono text-xs">
-                <span class="text-orange-400">${src}</span> → 
-                <span class="text-green-400">${dst}</span>
-              </div>
-              <div class="text-xs text-gray-400">${formatBytes(bytes)}</div>
-            </div>
-            <div class="flex justify-between text-xs text-gray-300">
-              <span>📦 ${packets} packets</span>
-              <span>⚡ ${(bytes / packets).toFixed(0)} B/pkt avg</span>
-            </div>
-          `;
-        container.appendChild(flowDiv);
-      });
-    }
-
-    // Packet Details Display
-    function updatePacketDetails(packets) {
-      const container = document.getElementById("packetDetails");
-      container.innerHTML = "";
-
-      if (!packets || packets.length === 0) {
-        container.innerHTML = '<div class="text-gray-400 text-center py-4">No packet data available</div>';
-        return;
-      }
-
-      packets.slice(0, 50).forEach(pkt => {
-        const time = new Date(pkt.timestamp * 1000).toLocaleTimeString();
-        const pktDiv = document.createElement('div');
-        pktDiv.className = `packet-item ${pkt.direction === 'sent' ? 'packet-sent' : 'packet-received'}`;
-
-        const dirIcon = pkt.direction === 'sent'
-          ? `<span class=\"icon-badge sent\" title=\"Sent packet\"><svg viewBox=\"0 0 24 24\" class=\"direction-icon\" fill=\"none\" stroke=\"currentColor\"><path d=\"M4 20L20 4M9 4h11v11\" stroke=\"currentColor\"/></svg></span>`
-          : `<span class=\"icon-badge recv\" title=\"Received packet\"><svg viewBox=\"0 0 24 24\" class=\"direction-icon\" fill=\"none\" stroke=\"currentColor\"><path d=\"M20 4L4 20M15 20H4V9\" stroke=\"currentColor\"/></svg></span>`;
-        const processInfo = pkt.process ? ` [${pkt.process}]` : '';
-
-        pktDiv.innerHTML = `
-            <div class="flex justify-between items-start">
-              <div class="flex-1 min-w-0">
-                <div class="flex items-center space-x-1 text-xs">
-                  ${dirIcon}
-                  <span class="text-gray-300">${time}</span>
-                  <span class="text-blue-300">${pkt.protocol}</span>
-                  ${pkt.app_protocol !== 'Unknown' ? `<span class="text-purple-300">${pkt.app_protocol}</span>` : ''}
+    function updateFlowList(flows) {
+        const div = document.getElementById('flowList');
+        if(!flows.length) { div.innerHTML = '<div class="text-gray-500 italic">Waiting for traffic...</div>'; return; }
+        
+        div.innerHTML = flows.map(([key, packets, bytes]) => {
+            const [src, dst] = key.split(':');
+            return `
+            <div class="flex justify-between items-center p-2 hover:bg-slate-800 rounded border-b border-slate-800/50">
+                <div>
+                    <div class="text-blue-300">${src} <span class="text-gray-500">→</span></div>
+                    <div class="text-emerald-300">${dst}</div>
                 </div>
-                <div class="text-xs mt-1 truncate">
-                  <span class="text-orange-300">${pkt.src}</span>${pkt.sport ? `:${pkt.sport}` : ''} → 
-                  <span class="text-green-300">${pkt.dst}</span>${pkt.dport ? `:${pkt.dport}` : ''}
-                  ${processInfo}
+                <div class="text-right">
+                    <div>${packets} pkts</div>
+                    <div class="text-gray-500">${formatBytes(bytes)}</div>
                 </div>
-              </div>
-              <div class="text-xs text-gray-400 ml-2">${pkt.size}B</div>
-            </div>
-          `;
-        container.appendChild(pktDiv);
-      });
-
-      // Auto-scroll to top for new packets
-      container.scrollTop = 0;
+            </div>`;
+        }).join('');
     }
 
-    // Map functionality
-    let map = L.map("map").setView([20, 0], 2);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 18,
-    }).addTo(map);
+    function updatePacketTable(packets) {
+        const tbody = document.getElementById('packetTableBody');
+        // Keep only last 15 in DOM for performance
+        const recent = packets.slice(0, 15);
+        tbody.innerHTML = recent.map(p => `
+            <tr class="border-b border-slate-800/50 hover:bg-slate-800/50 transition">
+                <td class="py-1 text-gray-500">${new Date(p.timestamp*1000).toLocaleTimeString().split(' ')[0]}</td>
+                <td class="py-1 text-blue-400">${p.src}</td>
+                <td class="py-1 text-emerald-400">${p.dst}</td>
+                <td class="py-1"><span class="px-1 rounded bg-slate-700 text-[10px]">${p.protocol}</span></td>
+                <td class="py-1 text-gray-400">${p.size}</td>
+                <td class="py-1 text-orange-300">${p.process || '-'}</td>
+            </tr>
+        `).join('');
+    }
 
-    let markers = [];
     function updateMap(points) {
-      try {
-        map.invalidateSize();
+        if(!map) {
+            map = L.map('map', {zoomControl:false, attributionControl:false}).setView([20, 0], 2);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {maxZoom: 19}).addTo(map);
+        }
+        // Clear old markers
         markers.forEach(m => map.removeLayer(m));
         markers = [];
-
-        (points || []).forEach(p => {
-          if (p && p.lat != null && p.lon != null) {
-            const lat = parseFloat(p.lat);
-            const lon = parseFloat(p.lon);
-            if (Number.isFinite(lat) && Number.isFinite(lon)) {
-              const marker = L.marker([lat, lon])
-                .addTo(map)
-                .bindPopup(
-                  `<strong>${p.ip}</strong><br>${p.country || ""} ${p.city || ""}<br>Packets: ${p.count}`
-                );
-              markers.push(marker);
-            }
-          }
+        
+        points.forEach(p => {
+            const m = L.circleMarker([p.lat, p.lon], {
+                radius: 5, fillColor: '#34d399', color: '#fff', weight: 1, fillOpacity: 0.7
+            }).bindPopup(`${p.city}, ${p.country}<br>IP: ${p.ip}`).addTo(map);
+            markers.push(m);
         });
-
-        const empty = document.getElementById("mapEmpty");
-        if (!markers.length) {
-          if (empty) empty.style.display = "";
-        } else {
-          if (empty) empty.style.display = "none";
-          if (markers.length === 1) {
-            try { map.setView(markers[0].getLatLng(), 4); } catch (e) { }
-          } else if (markers.length > 1) {
-            try {
-              const group = L.featureGroup(markers);
-              map.fitBounds(group.getBounds(), { maxZoom: 5, padding: [20, 20] });
-            } catch (e) { }
-          }
-        }
-      } catch (e) {
-        console.error("Map update error", e);
-      }
     }
 
-    // Alerts and Logs
-    function renderAlerts(list) {
-      const node = document.getElementById("alertsList");
-      node.innerHTML = "";
-      if (!Array.isArray(list) || list.length === 0) return;
-
-      list.forEach(a => {
-        if (!a) return;
-        const severity = a.severity || "info";
-        const timeSec = typeof a.time === "number" ? a.time : Date.now() / 1000;
-        const dt = new Date(timeSec * 1000);
-        const badgeColor = severity === "error" ? "bg-red-500" :
-          severity === "warn" ? "bg-yellow-400" : "bg-blue-400";
-
-        const li = document.createElement("li");
-        li.innerHTML = `<span class="badge ${badgeColor}">${severity.toUpperCase()}</span> <span class="text-xs text-gray-300">${dt.toLocaleTimeString()}</span> — ${a.msg || ""}`;
-        node.appendChild(li);
-      });
+    function formatBytes(bytes, decimals = 2) {
+        if (!+bytes) return '0 B';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
     }
-
-    function renderLogs(list) {
-      const node = document.getElementById("logsList");
-      node.innerHTML = "";
-      if (!Array.isArray(list)) return;
-
-      list.forEach(log => {
-        if (!log) return;
-        const dt = new Date(log.time * 1000).toLocaleTimeString();
-        const color = log.level === "error" ? "text-red-400" :
-          log.level === "warn" ? "text-yellow-300" : "text-blue-300";
-
-        const li = document.createElement("li");
-        li.className = `mb-1 ${color}`;
-        li.textContent = `[${dt}] [${log.level.toUpperCase()}] ${log.msg}`;
-        node.appendChild(li);
-      });
-    }
-
-    // Main data fetch and update function
-    async function fetchData() {
-      try {
-        const res = await fetch("/data");
-        const data = await res.json();
-
-        // Update counters
-        mechanicalCounter(document.getElementById("totalPackets"), data.total_packets, 1400, 12);
-        document.getElementById("activeConnections").innerText = data.active_connections;
-
-        // Update packet direction counters
-        mechanicalCounter(document.getElementById("packetsSent"), data.packet_directions?.sent || 0, 900, 20);
-        mechanicalCounter(document.getElementById("packetsReceived"), data.packet_directions?.received || 0, 900, 20);
-
-        // Update existing charts
-        if (protocolChart && data.protocols) {
-          const protoLabels = Object.keys(data.protocols);
-          protocolChart.data.labels = protoLabels;
-          protocolChart.data.datasets[0].data = Object.values(data.protocols);
-          protocolChart.data.datasets[0].backgroundColor = colorPalette.slice(0, protoLabels.length);
-          protocolChart.update();
-        }
-
-        if (appProtocolChart && data.app_protocols) {
-          const appProtoLabels = Object.keys(data.app_protocols);
-          appProtocolChart.data.labels = appProtoLabels;
-          appProtocolChart.data.datasets[0].data = Object.values(data.app_protocols);
-          appProtocolChart.data.datasets[0].backgroundColor = colorPalette.slice(0, appProtoLabels.length);
-          appProtocolChart.update();
-        }
-
-        if (appBandwidthChart && data.app_bandwidth) {
-          const appNames = Object.keys(data.app_bandwidth).slice(0, 8);
-          const appBwValues = appNames.map(name => data.app_bandwidth[name].total);
-          appBandwidthChart.data.labels = appNames.map(name => name.length > 15 ? name.substring(0, 12) + '...' : name);
-          appBandwidthChart.data.datasets[0].data = appBwValues;
-          appBandwidthChart.update();
-        }
-
-        if (ipChart && data.top_ips) {
-          ipChart.data.labels = data.top_ips.map(x => x[0] + " (" + x[1] + ")");
-          ipChart.data.datasets[0].data = data.top_ips.map(x => x[1]);
-          ipChart.update();
-        }
-
-        if (portChart && data.top_ports) {
-          portChart.data.labels = data.top_ports.map(x => x[0]);
-          portChart.data.datasets[0].data = data.top_ports.map(x => x[1]);
-          portChart.update();
-        }
-
-        if (sizeChart && data.packet_sizes) {
-          sizeChart.data.labels = data.packet_sizes.map(x => x[0]);
-          sizeChart.data.datasets[0].data = data.packet_sizes.map(x => x[1]);
-          sizeChart.update();
-        }
-
-        // Bandwidth chart update
-        const bw = data.bandwidth || [];
-        if (bandwidthChart) {
-          if (!_bandwidthInitialized) {
-            bandwidthChart.data.datasets[0].data = bw.slice();
-            bandwidthChart.data.labels = bw.map((_, i) => i - bw.length + "s");
-            bandwidthChart.update();
-            _bandwidthInitialized = true;
-          } else if (bw.length > 0) {
-            const newest = bw[bw.length - 1];
-            bandwidthChart.data.datasets[0].data.push(newest);
-            while (bandwidthChart.data.datasets[0].data.length > bw.length) {
-              bandwidthChart.data.datasets[0].data.shift();
-            }
-            const arr = bandwidthChart.data.datasets[0].data;
-            bandwidthChart.data.labels = arr.map((_, i) => i - arr.length + "s");
-            bandwidthChart.update();
-          }
-        }
-
-        // Update enhanced visualizations
-        updateTrafficFlows(data.traffic_flows);
-        updateNetworkTopology(data.network_topology);
-        updatePacketDetails(data.detailed_packets);
-
-        // Update standard components
-        renderAlerts(data.alerts);
-        updateMap(data.geo_points);
-        renderLogs(data.logs || []);
-
-      } catch (e) {
-        console.error("Fetch error:", e);
-      }
-
-      setTimeout(fetchData, 2000);
-    }
-
-    // Initialize everything
-    createCharts();
-    fetchData();
-
-    // Event Listeners
-    document.getElementById('interfaceBtn').onclick = showInterfaceModal;
-    document.getElementById('closeModalBtn').onclick = hideInterfaceModal;
-    document.getElementById('testAllBtn').onclick = testAllInterfaces;
-    document.getElementById('windowsFixBtn').onclick = fixWindowsFirewall;
-
-    // Handle window resize for topology
-    window.addEventListener('resize', () => {
-      if (networkSimulation) {
-        const container = document.getElementById("networkTopology");
-        const svg = d3.select(container).select("svg");
-        if (!svg.empty()) {
-          const width = container.clientWidth;
-          const height = container.clientHeight;
-          svg.attr("width", width).attr("height", height);
-          networkSimulation.force("center", d3.forceCenter(width / 2, height / 2)).restart();
-        }
-      }
-    });
   </script>
 </body>
-
 </html>
